@@ -1,0 +1,7 @@
+export * from 'src/compile'
+export * from 'src/dep'
+export * from 'src/document'
+export * from 'src/mvvm'
+export * from 'src/observer'
+export * from 'src/utilities'
+export * from 'src/watcher'
