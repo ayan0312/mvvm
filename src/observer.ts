@@ -17,14 +17,19 @@ export class Observer {
         Object.keys(data).forEach((key) => {
             data[key] = observe(data[key], vm)
         })
-        this.dep = new Dep()
+        this.dep = new Dep('data')
         this.proxy = new Proxy(data, {
             get: (target, key, receiver) => {
                 if (Dep.target) this.dep.depend()
                 return Reflect.get(target, key, receiver)
             },
-            set: (target, key, newValue) => {
-                const result = Reflect.set(target, key, observe(newValue))
+            set: (target, key, newValue, receiver) => {
+                const result = Reflect.set(
+                    target,
+                    key,
+                    observe(newValue),
+                    receiver
+                )
                 this.dep.notify()
                 return result
             },

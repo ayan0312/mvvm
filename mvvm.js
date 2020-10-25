@@ -104,18 +104,18 @@ define("observer", ["require", "exports", "dep"], function (require, exports, de
             Object.keys(data).forEach(function (key) {
                 data[key] = observe(data[key], vm);
             });
-            this.dep = new dep_1.Dep();
+            this.dep = new dep_1.Dep('data');
             this.proxy = new Proxy(data, {
                 get: function (target, key, receiver) {
                     if (dep_1.Dep.target)
                         _this.dep.depend();
                     return Reflect.get(target, key, receiver);
                 },
-                set: function (target, key, newValue) {
-                    var result = Reflect.set(target, key, observe(newValue));
+                set: function (target, key, newValue, receiver) {
+                    var result = Reflect.set(target, key, observe(newValue), receiver);
                     _this.dep.notify();
                     return result;
-                }
+                },
             });
         }
         return Observer;
@@ -125,7 +125,7 @@ define("observer", ["require", "exports", "dep"], function (require, exports, de
 define("utilities", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.toArray = exports.hasOwn = exports.isPlainObject = exports.toTypeString = exports.objectToString = exports.NOOP = exports.isFunction = exports.extend = void 0;
+    exports.unique = exports.toArray = exports.hasOwn = exports.isPlainObject = exports.toTypeString = exports.objectToString = exports.NOOP = exports.isFunction = exports.extend = void 0;
     exports.extend = function (a, b) {
         for (var key in b) {
             ;
@@ -150,6 +150,7 @@ define("utilities", ["require", "exports"], function (require, exports) {
         return [].slice.call(nodes);
     }
     exports.toArray = toArray;
+    exports.unique = function (arr) { return Array.from(new Set(arr)); };
 });
 define("component", ["require", "exports"], function (require, exports) {
     "use strict";
@@ -279,8 +280,6 @@ define("watcher", ["require", "exports", "dep", "mvvm", "utilities"], function (
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Watcher = exports.parseGetter = void 0;
     function parseGetter(exp) {
-        if (/[^\w.$]/.test(exp))
-            return;
         return function (vm) { return mvvm_1.getVMVal(vm, exp); };
     }
     exports.parseGetter = parseGetter;
@@ -323,76 +322,103 @@ define("watcher", ["require", "exports", "dep", "mvvm", "utilities"], function (
     }());
     exports.Watcher = Watcher;
 });
-define("document", ["require", "exports"], function (require, exports) {
+define("document", ["require", "exports", "utilities"], function (require, exports, utilities_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.model = exports.elementClass = exports.html = exports.text = exports.isTextNode = exports.isElementNode = exports.node2Fragment = void 0;
-    function node2Fragment(el) {
-        var fragment = document.createDocumentFragment(), child;
-        while ((child = el.firstChild))
-            fragment.appendChild(child);
-        return fragment;
-    }
-    exports.node2Fragment = node2Fragment;
-    function isElementNode(node) {
-        if (node instanceof Element)
-            return node.nodeType == 1;
-        return false;
-    }
-    exports.isElementNode = isElementNode;
-    function isTextNode(node) {
-        if (node instanceof Text)
-            return node.nodeType == 3;
-        return false;
-    }
-    exports.isTextNode = isTextNode;
-    function text(node, value) {
-        node.textContent = value ? value : '';
-    }
-    exports.text = text;
-    function html(node, value) {
-        node.innerHTML = value ? value : '';
-    }
-    exports.html = html;
-    function elementClass(node, value, oldValue) {
-        var className = node.className;
-        className = className.replace(oldValue, '').replace(/\s$/, '');
-        var space = className && String(value) ? ' ' : '';
-        node.className = className + space + value;
-    }
-    exports.elementClass = elementClass;
-    function model(node, value, oldValue) {
-        node.value = value ? value : '';
-    }
-    exports.model = model;
+    exports.ElementUtility = void 0;
+    var ElementUtility = /** @class */ (function () {
+        function ElementUtility() {
+        }
+        ElementUtility.fragment = function (el) {
+            var fragment = document.createDocumentFragment(), child;
+            while ((child = el.firstChild))
+                fragment.appendChild(child);
+            return fragment;
+        };
+        ElementUtility.isElementNode = function (node) {
+            if (node instanceof Element)
+                return node.nodeType == 1;
+            return false;
+        };
+        ElementUtility.isTextNode = function (node) {
+            if (node instanceof Text)
+                return node.nodeType == 3;
+            return false;
+        };
+        ElementUtility.text = function (node, value) {
+            if (typeof value === 'number')
+                value = String(value);
+            node.textContent = value ? value : '';
+        };
+        ElementUtility.html = function (node, value) {
+            if (typeof value === 'number')
+                value = String(value);
+            node.innerHTML = value ? value : '';
+        };
+        ElementUtility.class = function (node, value, oldValue) {
+            var className = node.className;
+            className = className.replace(oldValue, '').replace(/\s$/, '');
+            var space = className && String(value) ? ' ' : '';
+            node.className = className + space + value;
+        };
+        ElementUtility.model = function (node, newValue) {
+            if (typeof newValue === 'number')
+                newValue = String(newValue);
+            node.value = newValue ? newValue : '';
+        };
+        ElementUtility.style = function (node, newValue, oldValue) {
+            if (!oldValue)
+                oldValue = {};
+            if (!newValue)
+                newValue = {};
+            var keys = Object.keys(oldValue).concat(Object.keys(newValue));
+            utilities_3.unique(keys).forEach(function (key) {
+                if (utilities_3.hasOwn(oldValue, key) && utilities_3.hasOwn(newValue, key)) {
+                    if (oldValue[key] != newValue[key])
+                        node.style.setProperty(key, newValue[key]);
+                }
+                else if (utilities_3.hasOwn(newValue, key))
+                    node.style.setProperty(key, newValue[key]);
+                else
+                    node.style.removeProperty(key);
+            });
+        };
+        ElementUtility.display = function (node, newValue, oldValue) {
+            var func = function (val) {
+                return {
+                    display: val ? 'block' : 'none',
+                };
+            };
+            ElementUtility.style(node, func(newValue), func(oldValue));
+        };
+        return ElementUtility;
+    }());
+    exports.ElementUtility = ElementUtility;
 });
-define("compile", ["require", "exports", "watcher", "mvvm", "utilities", "document"], function (require, exports, watcher_2, mvvm_2, utilities_3, document_1) {
+define("compile", ["require", "exports", "watcher", "mvvm", "utilities", "document"], function (require, exports, watcher_2, mvvm_2, utilities_4, document_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Compile = void 0;
     function isDirective(attr) {
         return attr.indexOf('v-') == 0;
     }
-    function isEventDirective(dir) {
-        return dir.indexOf('on') === 0;
-    }
-    function isTextDirective(dir) {
-        return dir.indexOf('text') === 0;
-    }
-    function isHtmlDirective(dir) {
-        return dir.indexOf('html') === 0;
-    }
-    function isModelDirective(dir) {
-        return dir.indexOf('model') === 0;
-    }
-    function isClassDirective(dir) {
-        return dir.indexOf('class') === 0;
-    }
+    var parseAnyDirectiveFunction = function (parseString) {
+        return function (dir) { return dir.indexOf(parseString) === 0; };
+    };
+    var isEventDirective = parseAnyDirectiveFunction('on');
+    var isTextDirective = parseAnyDirectiveFunction('text');
+    var isHtmlDirective = parseAnyDirectiveFunction('html');
+    var isModelDirective = parseAnyDirectiveFunction('model');
+    var isClassDirective = parseAnyDirectiveFunction('class');
+    var isStyleDirective = parseAnyDirectiveFunction('style');
+    var isShowDirective = parseAnyDirectiveFunction('show');
     function bindWatcher(node, vm, exp, updater) {
         var val = mvvm_2.getVMVal(vm, exp);
         updater && updater(node, val);
-        new watcher_2.Watcher(vm, exp, function (value, oldValue) {
-            updater && updater(node, value, oldValue);
+        new watcher_2.Watcher(vm, exp, function (newValue, oldValue) {
+            if (newValue === oldValue)
+                return;
+            updater && updater(node, newValue, oldValue);
         });
     }
     function eventHandler(node, vm, exp, eventType) {
@@ -404,11 +430,13 @@ define("compile", ["require", "exports", "watcher", "mvvm", "utilities", "docume
     var Compile = /** @class */ (function () {
         function Compile(el, vm) {
             this.$vm = vm;
-            this.$el = document_1.isElementNode(el) ? el : document.querySelector(el);
+            this.$el = document_1.ElementUtility.isElementNode(el)
+                ? el
+                : document.querySelector(el);
             if (!this.$el)
                 throw '';
             mvvm_2.triggerLifecycleHook(this.$vm, 'beforeMount');
-            this.$fragment = document_1.node2Fragment(this.$el);
+            this.$fragment = document_1.ElementUtility.fragment(this.$el);
             this.compileElement(this.$fragment);
             this.$el.appendChild(this.$fragment);
             mvvm_2.triggerLifecycleHook(this.$vm, 'mounted');
@@ -418,10 +446,11 @@ define("compile", ["require", "exports", "watcher", "mvvm", "utilities", "docume
             var childNodes = el.childNodes;
             childNodes.forEach(function (node) {
                 var reg = /\{\{(.*)\}\}/;
-                if (document_1.isElementNode(node))
+                if (document_1.ElementUtility.isElementNode(node))
                     _this.compile(node);
-                else if (document_1.isTextNode(node) && reg.test(node.textContent))
-                    bindWatcher(node, _this.$vm, RegExp.$1.trim(), document_1.text);
+                else if (document_1.ElementUtility.isTextNode(node) &&
+                    reg.test(node.textContent))
+                    bindWatcher(node, _this.$vm, RegExp.$1.trim(), document_1.ElementUtility.text);
                 if (node.childNodes && node.childNodes.length)
                     _this.compileElement(node);
             });
@@ -429,7 +458,7 @@ define("compile", ["require", "exports", "watcher", "mvvm", "utilities", "docume
         Compile.prototype.compile = function (node) {
             var _this = this;
             var nodeAttrs = node.attributes;
-            utilities_3.toArray(nodeAttrs).forEach(function (attr) {
+            utilities_4.toArray(nodeAttrs).forEach(function (attr) {
                 var attrName = attr.name;
                 if (!isDirective(attrName))
                     return;
@@ -440,13 +469,13 @@ define("compile", ["require", "exports", "watcher", "mvvm", "utilities", "docume
                     eventHandler(node, _this.$vm, exp, eventType);
                 }
                 else if (isTextDirective(dir))
-                    bindWatcher(node, _this.$vm, exp, document_1.text);
+                    bindWatcher(node, _this.$vm, exp, document_1.ElementUtility.text);
                 else if (isHtmlDirective(dir))
-                    bindWatcher(node, _this.$vm, exp, document_1.html);
+                    bindWatcher(node, _this.$vm, exp, document_1.ElementUtility.html);
                 else if (isClassDirective(dir))
-                    bindWatcher(node, _this.$vm, exp, document_1.elementClass);
+                    bindWatcher(node, _this.$vm, exp, document_1.ElementUtility.class);
                 else if (isModelDirective(dir)) {
-                    bindWatcher(node, _this.$vm, exp, document_1.model);
+                    bindWatcher(node, _this.$vm, exp, document_1.ElementUtility.model);
                     var val_1 = mvvm_2.getVMVal(_this.$vm, exp);
                     node.addEventListener('input', function (e) {
                         var target = e.target;
@@ -457,6 +486,10 @@ define("compile", ["require", "exports", "watcher", "mvvm", "utilities", "docume
                         val_1 = newValue;
                     });
                 }
+                else if (isStyleDirective(dir))
+                    bindWatcher(node, _this.$vm, exp, document_1.ElementUtility.style);
+                else if (isShowDirective(dir))
+                    bindWatcher(node, _this.$vm, exp, document_1.ElementUtility.display);
                 node.removeAttribute(attrName);
             });
         };
@@ -464,7 +497,7 @@ define("compile", ["require", "exports", "watcher", "mvvm", "utilities", "docume
     }());
     exports.Compile = Compile;
 });
-define("index", ["require", "exports", "compile", "dep", "document", "mvvm", "observer", "utilities", "watcher"], function (require, exports, compile_2, dep_3, document_2, mvvm_3, observer_2, utilities_4, watcher_3) {
+define("index", ["require", "exports", "compile", "dep", "document", "mvvm", "observer", "utilities", "watcher"], function (require, exports, compile_2, dep_3, document_2, mvvm_3, observer_2, utilities_5, watcher_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     __exportStar(compile_2, exports);
@@ -472,7 +505,7 @@ define("index", ["require", "exports", "compile", "dep", "document", "mvvm", "ob
     __exportStar(document_2, exports);
     __exportStar(mvvm_3, exports);
     __exportStar(observer_2, exports);
-    __exportStar(utilities_4, exports);
+    __exportStar(utilities_5, exports);
     __exportStar(watcher_3, exports);
 });
 //# sourceMappingURL=mvvm.js.map

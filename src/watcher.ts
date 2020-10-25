@@ -8,7 +8,6 @@ export type Getter = (obj: MVVM) => MVVM
 export type WatcherMethod = DataKey | Getter
 
 export function parseGetter(exp: string): (vm: MVVM) => DataType {
-    if (/[^\w.$]/.test(exp)) return
     return (vm: MVVM): DataType => getVMVal(vm, exp)
 }
 
@@ -31,7 +30,6 @@ export class Watcher {
 
         if (isFunction(expOrFn)) this.getter = expOrFn
         else this.getter = parseGetter(expOrFn.trim())
-
         this.value = this.get()
     }
 

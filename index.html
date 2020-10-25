@@ -48,26 +48,32 @@
 
 <body>
     <div id="app">
-        <input class="textInput" v-class="numberInputClass" disabled type="text" v-model="number.input">
-        <button v-on:click="increase1">increase 1</button>
-        <button v-on:click="increase10">increase 10</button>
-        <button v-on:click="decrease10">decrease 10</button>
-        <button v-on:click="switchInputTextColor">switch schema of the input</button>
-        <p>{{ getInformation }}</p>
-        <p>{{ getInputNumberOver100TimesInformation }}</p>
+        <button v-on:click="displayController">显示/隐藏</button>
+        <div v-show="display">
+            <input class="textInput" v-style="fontSizeStyle" v-class="numberInputClass" disabled type="text"
+                v-model="number.input">
+            <button v-on:click="increase1">increase 1</button>
+            <button v-on:click="increase10">increase 10</button>
+            <button v-on:click="decrease10">decrease 10</button>
+            <button v-on:click="switchInputTextColor">switch schema of the input</button>
+            <p>{{ getInformation }}</p>
+            <p>{{ getInputNumberOver100TimesInformation }}</p>
+        </div>
     </div>
     <script src="https://requirejs.org/docs/release/2.3.6/comments/require.js"></script>
     <script src="./mvvm.js"></script>
     <script>
         require(['index'], function (exportModules) {
-            const { MVVM }  = exportModules
-            const vm  = new MVVM({
+            const { MVVM } = exportModules
+            const vm = new MVVM({
                 el: '#app',
                 data: {
                     number: {
                         input: 0,
                         click: 0
                     },
+                    display: true,
+                    fontSizeStyle: { 'font-size': '14px' },
                     inputNumberOver100Times: 0,
                     numberInputClass: 'red',
                     inputClassesIndex: 0,
@@ -85,9 +91,17 @@
                     "number.input": function (newVal, oldVal) {
                         if (newVal >= 100 && oldVal < 100)
                             this.inputNumberOver100Times += 1
+                    },
+                    "number.click": function (newVal, oldVal) {
+                        this.fontSizeStyle = {
+                            'font-size': 14 + newVal + 'px'
+                        }
                     }
                 },
                 methods: {
+                    displayController(e) {
+                        this.display = !this.display
+                    },
                     increaseClickNumber() {
                         this.number.click += 1
                     },

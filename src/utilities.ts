@@ -34,3 +34,5 @@ export type ArrayHash = {
 export function toArray<T extends ArrayHash, R>(nodes: T): Array<R> {
     return [].slice.call(nodes)
 }
+
+export const unique = <T>(arr: T[]) => Array.from(new Set(arr))

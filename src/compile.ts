@@ -1,47 +1,30 @@
 import { Watcher } from 'src/watcher'
 import { getVMVal, MVVM, setVMVal, triggerLifecycleHook } from 'src/mvvm'
-import { toArray } from 'src/utilities'
-import {
-    elementClass,
-    html,
-    HTMLModelElement,
-    isElementNode,
-    isTextNode,
-    model,
-    node2Fragment,
-    text,
-} from 'src/document'
+import { isPlainObject, toArray } from 'src/utilities'
+import { ElementUtility, HTMLModelElement } from 'src/document'
 
 function isDirective(attr: string): boolean {
     return attr.indexOf('v-') == 0
 }
 
-function isEventDirective(dir: string): boolean {
-    return dir.indexOf('on') === 0
+const parseAnyDirectiveFunction = (parseString) => {
+    return (dir: string) => dir.indexOf(parseString) === 0
 }
 
-function isTextDirective(dir: string): boolean {
-    return dir.indexOf('text') === 0
-}
-
-function isHtmlDirective(dir: string): boolean {
-    return dir.indexOf('html') === 0
-}
-
-function isModelDirective(dir: string): boolean {
-    return dir.indexOf('model') === 0
-}
-
-function isClassDirective(dir: string): boolean {
-    return dir.indexOf('class') === 0
-}
+const isEventDirective = parseAnyDirectiveFunction('on')
+const isTextDirective = parseAnyDirectiveFunction('text')
+const isHtmlDirective = parseAnyDirectiveFunction('html')
+const isModelDirective = parseAnyDirectiveFunction('model')
+const isClassDirective = parseAnyDirectiveFunction('class')
+const isStyleDirective = parseAnyDirectiveFunction('style')
+const isShowDirective = parseAnyDirectiveFunction('show')
 
 function bindWatcher(node: Element | Text, vm: MVVM, exp: string, updater) {
     let val = getVMVal(vm, exp)
     updater && updater(node, val)
-
-    new Watcher(vm, exp, (value, oldValue) => {
-        updater && updater(node, value, oldValue)
+    new Watcher(vm, exp, (newValue, oldValue) => {
+        if (newValue === oldValue) return
+        updater && updater(node, newValue, oldValue)
     })
 }
 
@@ -60,12 +43,14 @@ export class Compile {
 
     constructor(el: string | Element, vm: MVVM) {
         this.$vm = vm
-        this.$el = isElementNode(el) ? el : document.querySelector(el)
+        this.$el = ElementUtility.isElementNode(el)
+            ? el
+            : document.querySelector(el)
 
         if (!this.$el) throw ''
 
         triggerLifecycleHook(this.$vm, 'beforeMount')
-        this.$fragment = node2Fragment(this.$el)
+        this.$fragment = ElementUtility.fragment(this.$el)
         this.compileElement(this.$fragment)
         this.$el.appendChild(this.$fragment)
         triggerLifecycleHook(this.$vm, 'mounted')
@@ -76,9 +61,17 @@ export class Compile {
 
         childNodes.forEach((node) => {
             let reg = /\{\{(.*)\}\}/
-            if (isElementNode(node)) this.compile(node)
-            else if (isTextNode(node) && reg.test(node.textContent))
-                bindWatcher(node, this.$vm, RegExp.$1.trim(), text)
+            if (ElementUtility.isElementNode(node)) this.compile(node)
+            else if (
+                ElementUtility.isTextNode(node) &&
+                reg.test(node.textContent)
+            )
+                bindWatcher(
+                    node,
+                    this.$vm,
+                    RegExp.$1.trim(),
+                    ElementUtility.text
+                )
             if (node.childNodes && node.childNodes.length)
                 this.compileElement(node)
         })
@@ -97,13 +90,13 @@ export class Compile {
                 let eventType = dir.split(':')[1]
                 eventHandler(node, this.$vm, exp, eventType)
             } else if (isTextDirective(dir))
-                bindWatcher(node, this.$vm, exp, text)
+                bindWatcher(node, this.$vm, exp, ElementUtility.text)
             else if (isHtmlDirective(dir))
-                bindWatcher(node, this.$vm, exp, html)
+                bindWatcher(node, this.$vm, exp, ElementUtility.html)
             else if (isClassDirective(dir))
-                bindWatcher(node, this.$vm, exp, elementClass)
+                bindWatcher(node, this.$vm, exp, ElementUtility.class)
             else if (isModelDirective(dir)) {
-                bindWatcher(node, this.$vm, exp, model)
+                bindWatcher(node, this.$vm, exp, ElementUtility.model)
                 let val = getVMVal(this.$vm, exp)
                 node.addEventListener('input', (e: any) => {
                     let target: HTMLModelElement = e.target
@@ -112,7 +105,10 @@ export class Compile {
                     setVMVal(this.$vm, exp, newValue)
                     val = newValue
                 })
-            }
+            } else if (isStyleDirective(dir))
+                bindWatcher(node, this.$vm, exp, ElementUtility.style)
+            else if (isShowDirective(dir))
+                bindWatcher(node, this.$vm, exp, ElementUtility.display)
 
             node.removeAttribute(attrName)
         })
