@@ -59,7 +59,7 @@ define("dep", ["require", "exports"], function (require, exports) {
     exports.getSequence = getSequence;
     var sequence = getSequence();
     function getId(name) {
-        return name + "." + new Date().getTime() + "." + Math.floor(Math.random() * 10000) + "." + sequence.next().value;
+        return (name ? name : 'none') + "." + new Date().getTime() + "." + Math.floor(Math.random() * 10000) + "." + sequence.next().value;
     }
     exports.getId = getId;
     var Dep = /** @class */ (function () {
@@ -94,32 +94,28 @@ define("observer", ["require", "exports", "dep"], function (require, exports, de
     exports.Observer = exports.observe = void 0;
     function observe(value, vm) {
         if (!value || typeof value !== 'object')
-            return;
-        return new Observer(value, vm);
+            return value;
+        return new Observer(value, vm).proxy;
     }
     exports.observe = observe;
     var Observer = /** @class */ (function () {
         function Observer(data, vm) {
+            var _this = this;
             Object.keys(data).forEach(function (key) {
-                var dep = new dep_1.Dep(key);
-                var val = data[key];
-                var childObj = observe(val);
-                Object.defineProperty(data, key, {
-                    configurable: false,
-                    enumerable: true,
-                    get: function () {
-                        if (dep_1.Dep.target)
-                            dep.depend();
-                        return val;
-                    },
-                    set: function (newVal) {
-                        if (newVal === val)
-                            return;
-                        val = newVal;
-                        childObj = observe(newVal);
-                        dep.notify();
-                    },
-                });
+                data[key] = observe(data[key], vm);
+            });
+            this.dep = new dep_1.Dep();
+            this.proxy = new Proxy(data, {
+                get: function (target, key, receiver) {
+                    if (dep_1.Dep.target)
+                        _this.dep.depend();
+                    return Reflect.get(target, key, receiver);
+                },
+                set: function (target, key, newValue) {
+                    var result = Reflect.set(target, key, observe(newValue));
+                    _this.dep.notify();
+                    return result;
+                }
             });
         }
         return Observer;
@@ -207,7 +203,7 @@ define("mvvm", ["require", "exports", "watcher", "compile", "observer", "utiliti
         MVVM.prototype._initData = function () {
             var _this = this;
             Object.keys(this._data).forEach(function (key) { return _this._proxyData(key); });
-            observer_1.observe(this._data, this);
+            this._data = observer_1.observe(this._data, this);
         };
         MVVM.prototype._initComputed = function () {
             var _this = this;
@@ -394,12 +390,8 @@ define("compile", ["require", "exports", "watcher", "mvvm", "utilities", "docume
     }
     function bindWatcher(node, vm, exp, updater) {
         var val = mvvm_2.getVMVal(vm, exp);
-        if (typeof val === "number")
-            val = String(val);
         updater && updater(node, val);
         new watcher_2.Watcher(vm, exp, function (value, oldValue) {
-            if (typeof value === "number")
-                value = String(value);
             updater && updater(node, value, oldValue);
         });
     }

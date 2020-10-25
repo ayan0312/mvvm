@@ -96,7 +96,7 @@ export class MVVM {
 
     private _initData(): void {
         Object.keys(this._data).forEach((key) => this._proxyData(key))
-        observe(this._data, this)
+        this._data = observe(this._data, this)
     }
 
     private _initComputed(): void {

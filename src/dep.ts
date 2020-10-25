@@ -11,8 +11,8 @@ export function* getSequence() {
 
 let sequence = getSequence()
 
-export function getId(name: string): ID {
-    return `${name}.${new Date().getTime()}.${Math.floor(
+export function getId(name?: string): ID {
+    return `${name ? name : 'none'}.${new Date().getTime()}.${Math.floor(
         Math.random() * 10000
     )}.${sequence.next().value}`
 }
@@ -21,7 +21,7 @@ export class Dep {
     public id: ID
     public subs: Watcher[]
 
-    constructor(name: string) {
+    constructor(name?: string) {
         this.id = getId(name)
         this.subs = []
     }

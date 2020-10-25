@@ -38,11 +38,9 @@ function isClassDirective(dir: string): boolean {
 
 function bindWatcher(node: Element | Text, vm: MVVM, exp: string, updater) {
     let val = getVMVal(vm, exp)
-    if (typeof val === 'number') val = String(val)
     updater && updater(node, val)
 
     new Watcher(vm, exp, (value, oldValue) => {
-        if (typeof value === 'number') value = String(value)
         updater && updater(node, value, oldValue)
     })
 }
