@@ -42,6 +42,10 @@ export class Watcher {
         }
     }
 
+    public removeDep(dep: Dep): void {
+        delete this.depIds[dep.id]
+    }
+
     public addDep(dep: Dep): void {
         if (!hasOwn(this.depIds, dep.id)) {
             dep.addSub(this)

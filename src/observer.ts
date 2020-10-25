@@ -1,5 +1,6 @@
 import { Dep } from 'src/dep'
 import { Data, MVVM } from 'src/mvvm'
+import { hasOwn, isPlainObject } from './utilities'
 
 export function observe(
     value: Data | Data[keyof Data],
@@ -18,6 +19,7 @@ export class Observer {
             data[key] = observe(data[key], vm)
         })
         this.dep = new Dep('data')
+        data['__ob__'] = this
         this.proxy = new Proxy(data, {
             get: (target, key, receiver) => {
                 if (Dep.target) this.dep.depend()
@@ -31,6 +33,17 @@ export class Observer {
                     receiver
                 )
                 this.dep.notify()
+                return result
+            },
+            deleteProperty: (target, key: string) => {
+                const childObj = target[key]
+                let result: boolean = false
+                if (isPlainObject(childObj) && hasOwn(childObj, '__ob__')) {
+                    let ob = childObj['__ob__']
+                    ob.dep.delete()
+                    ob = null
+                    result = Reflect.deleteProperty(target, key)
+                }
                 return result
             },
         })

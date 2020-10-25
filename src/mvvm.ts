@@ -48,7 +48,7 @@ export function triggerLifecycleHook(vm: MVVM, hookName: LifecycleHookName) {
 export class MVVM {
     public $options: MVVMOptions
     public $compile: Compile
-    private _data: Data
+    public $data: Data
 
     constructor(options: MVVMOptions = {}) {
         this.$options = options || {}
@@ -56,7 +56,7 @@ export class MVVM {
             MVVM._components,
             this.$options.components || {}
         )
-        this._data = this.$options.data
+        this.$data = this.$options.data
         this._init()
         this.$compile = new Compile(
             'element' in options ? options.element : document.body,
@@ -95,8 +95,8 @@ export class MVVM {
     }
 
     private _initData(): void {
-        Object.keys(this._data).forEach((key) => this._proxyData(key))
-        this._data = observe(this._data, this)
+        Object.keys(this.$data).forEach((key) => this._proxyData(key))
+        this.$data = observe(this.$data, this)
     }
 
     private _initComputed(): void {
@@ -126,10 +126,10 @@ export class MVVM {
             configurable: false,
             enumerable: true,
             get: () => {
-                return this._data[key]
+                return this.$data[key]
             },
             set: (newVal) => {
-                this._data[key] = newVal
+                this.$data[key] = newVal
             },
         })
     }

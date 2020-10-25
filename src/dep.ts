@@ -26,6 +26,15 @@ export class Dep {
         this.subs = []
     }
 
+    public delete(): void {
+        if (this.subs.length < 1) return
+        this.notify()
+        this.subs.forEach((sub) => {
+            sub.removeDep(this)
+        })
+        this.subs = []
+    }
+
     public addSub(sub: Watcher): void {
         this.subs.push(sub)
     }
@@ -34,12 +43,8 @@ export class Dep {
         Dep.target.addDep(this)
     }
 
-    public removeSub(sub: Watcher): void {
-        let index = this.subs.indexOf(sub)
-        if (index != -1) this.subs.splice(index, 1)
-    }
-
     public notify(): void {
+        if (this.subs.length < 1) return
         this.subs.forEach((sub) => {
             sub.update()
         })

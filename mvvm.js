@@ -67,18 +67,25 @@ define("dep", ["require", "exports"], function (require, exports) {
             this.id = getId(name);
             this.subs = [];
         }
+        Dep.prototype.delete = function () {
+            var _this = this;
+            if (this.subs.length < 1)
+                return;
+            this.notify();
+            this.subs.forEach(function (sub) {
+                sub.removeDep(_this);
+            });
+            this.subs = [];
+        };
         Dep.prototype.addSub = function (sub) {
             this.subs.push(sub);
         };
         Dep.prototype.depend = function () {
             Dep.target.addDep(this);
         };
-        Dep.prototype.removeSub = function (sub) {
-            var index = this.subs.indexOf(sub);
-            if (index != -1)
-                this.subs.splice(index, 1);
-        };
         Dep.prototype.notify = function () {
+            if (this.subs.length < 1)
+                return;
             this.subs.forEach(function (sub) {
                 sub.update();
             });
@@ -87,40 +94,6 @@ define("dep", ["require", "exports"], function (require, exports) {
         return Dep;
     }());
     exports.Dep = Dep;
-});
-define("observer", ["require", "exports", "dep"], function (require, exports, dep_1) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.Observer = exports.observe = void 0;
-    function observe(value, vm) {
-        if (!value || typeof value !== 'object')
-            return value;
-        return new Observer(value, vm).proxy;
-    }
-    exports.observe = observe;
-    var Observer = /** @class */ (function () {
-        function Observer(data, vm) {
-            var _this = this;
-            Object.keys(data).forEach(function (key) {
-                data[key] = observe(data[key], vm);
-            });
-            this.dep = new dep_1.Dep('data');
-            this.proxy = new Proxy(data, {
-                get: function (target, key, receiver) {
-                    if (dep_1.Dep.target)
-                        _this.dep.depend();
-                    return Reflect.get(target, key, receiver);
-                },
-                set: function (target, key, newValue, receiver) {
-                    var result = Reflect.set(target, key, observe(newValue), receiver);
-                    _this.dep.notify();
-                    return result;
-                },
-            });
-        }
-        return Observer;
-    }());
-    exports.Observer = Observer;
 });
 define("utilities", ["require", "exports"], function (require, exports) {
     "use strict";
@@ -152,11 +125,57 @@ define("utilities", ["require", "exports"], function (require, exports) {
     exports.toArray = toArray;
     exports.unique = function (arr) { return Array.from(new Set(arr)); };
 });
+define("observer", ["require", "exports", "dep", "utilities"], function (require, exports, dep_1, utilities_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Observer = exports.observe = void 0;
+    function observe(value, vm) {
+        if (!value || typeof value !== 'object')
+            return value;
+        return new Observer(value, vm).proxy;
+    }
+    exports.observe = observe;
+    var Observer = /** @class */ (function () {
+        function Observer(data, vm) {
+            var _this = this;
+            Object.keys(data).forEach(function (key) {
+                data[key] = observe(data[key], vm);
+            });
+            this.dep = new dep_1.Dep('data');
+            data['__ob__'] = this;
+            this.proxy = new Proxy(data, {
+                get: function (target, key, receiver) {
+                    if (dep_1.Dep.target)
+                        _this.dep.depend();
+                    return Reflect.get(target, key, receiver);
+                },
+                set: function (target, key, newValue, receiver) {
+                    var result = Reflect.set(target, key, observe(newValue), receiver);
+                    _this.dep.notify();
+                    return result;
+                },
+                deleteProperty: function (target, key) {
+                    var childObj = target[key];
+                    var result = false;
+                    if (utilities_1.isPlainObject(childObj) && utilities_1.hasOwn(childObj, '__ob__')) {
+                        var ob = childObj['__ob__'];
+                        ob.dep.delete();
+                        ob = null;
+                        result = Reflect.deleteProperty(target, key);
+                    }
+                    return result;
+                }
+            });
+        }
+        return Observer;
+    }());
+    exports.Observer = Observer;
+});
 define("component", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
 });
-define("mvvm", ["require", "exports", "watcher", "compile", "observer", "utilities"], function (require, exports, watcher_1, compile_1, observer_1, utilities_1) {
+define("mvvm", ["require", "exports", "watcher", "compile", "observer", "utilities"], function (require, exports, watcher_1, compile_1, observer_1, utilities_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.setVMVal = exports.getVMVal = exports.MVVM = exports.triggerLifecycleHook = void 0;
@@ -168,8 +187,8 @@ define("mvvm", ["require", "exports", "watcher", "compile", "observer", "utiliti
         function MVVM(options) {
             if (options === void 0) { options = {}; }
             this.$options = options || {};
-            this.$options.components = utilities_1.extend(MVVM._components, this.$options.components || {});
-            this._data = this.$options.data;
+            this.$options.components = utilities_2.extend(MVVM._components, this.$options.components || {});
+            this.$data = this.$options.data;
             this._init();
             this.$compile = new compile_1.Compile('element' in options ? options.element : document.body, this);
         }
@@ -194,7 +213,7 @@ define("mvvm", ["require", "exports", "watcher", "compile", "observer", "utiliti
                 return;
             Object.keys(methods).forEach(function (key) {
                 var object = methods[key];
-                if (!utilities_1.isFunction(object))
+                if (!utilities_2.isFunction(object))
                     return;
                 if (_this[key])
                     return;
@@ -203,8 +222,8 @@ define("mvvm", ["require", "exports", "watcher", "compile", "observer", "utiliti
         };
         MVVM.prototype._initData = function () {
             var _this = this;
-            Object.keys(this._data).forEach(function (key) { return _this._proxyData(key); });
-            this._data = observer_1.observe(this._data, this);
+            Object.keys(this.$data).forEach(function (key) { return _this._proxyData(key); });
+            this.$data = observer_1.observe(this.$data, this);
         };
         MVVM.prototype._initComputed = function () {
             var _this = this;
@@ -214,8 +233,8 @@ define("mvvm", ["require", "exports", "watcher", "compile", "observer", "utiliti
             Object.keys(computed).forEach(function (key) {
                 var object = computed[key];
                 Object.defineProperty(_this, key, {
-                    get: utilities_1.isFunction(object) ? object : object.get,
-                    set: utilities_1.NOOP,
+                    get: utilities_2.isFunction(object) ? object : object.get,
+                    set: utilities_2.NOOP,
                 });
             });
         };
@@ -226,7 +245,7 @@ define("mvvm", ["require", "exports", "watcher", "compile", "observer", "utiliti
                 return;
             Object.keys(watch).forEach(function (key) {
                 var object = watch[key];
-                if (!utilities_1.isFunction(object))
+                if (!utilities_2.isFunction(object))
                     return;
                 _this.$watch(key, object);
             });
@@ -237,10 +256,10 @@ define("mvvm", ["require", "exports", "watcher", "compile", "observer", "utiliti
                 configurable: false,
                 enumerable: true,
                 get: function () {
-                    return _this._data[key];
+                    return _this.$data[key];
                 },
                 set: function (newVal) {
-                    _this._data[key] = newVal;
+                    _this.$data[key] = newVal;
                 },
             });
         };
@@ -275,7 +294,7 @@ define("mvvm", ["require", "exports", "watcher", "compile", "observer", "utiliti
     }
     exports.setVMVal = setVMVal;
 });
-define("watcher", ["require", "exports", "dep", "mvvm", "utilities"], function (require, exports, dep_2, mvvm_1, utilities_2) {
+define("watcher", ["require", "exports", "dep", "mvvm", "utilities"], function (require, exports, dep_2, mvvm_1, utilities_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Watcher = exports.parseGetter = void 0;
@@ -292,7 +311,7 @@ define("watcher", ["require", "exports", "dep", "mvvm", "utilities"], function (
             this.vm = vm;
             this.expOrFn = expOrFn;
             this.depIds = {};
-            if (utilities_2.isFunction(expOrFn))
+            if (utilities_3.isFunction(expOrFn))
                 this.getter = expOrFn;
             else
                 this.getter = parseGetter(expOrFn.trim());
@@ -306,8 +325,11 @@ define("watcher", ["require", "exports", "dep", "mvvm", "utilities"], function (
                 this.cb.call(this.vm, newValue, oldVal);
             }
         };
+        Watcher.prototype.removeDep = function (dep) {
+            delete this.depIds[dep.id];
+        };
         Watcher.prototype.addDep = function (dep) {
-            if (!utilities_2.hasOwn(this.depIds, dep.id)) {
+            if (!utilities_3.hasOwn(this.depIds, dep.id)) {
                 dep.addSub(this);
                 this.depIds[dep.id] = dep;
             }
@@ -322,7 +344,7 @@ define("watcher", ["require", "exports", "dep", "mvvm", "utilities"], function (
     }());
     exports.Watcher = Watcher;
 });
-define("document", ["require", "exports", "utilities"], function (require, exports, utilities_3) {
+define("document", ["require", "exports", "utilities"], function (require, exports, utilities_4) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.ElementUtility = void 0;
@@ -372,12 +394,12 @@ define("document", ["require", "exports", "utilities"], function (require, expor
             if (!newValue)
                 newValue = {};
             var keys = Object.keys(oldValue).concat(Object.keys(newValue));
-            utilities_3.unique(keys).forEach(function (key) {
-                if (utilities_3.hasOwn(oldValue, key) && utilities_3.hasOwn(newValue, key)) {
+            utilities_4.unique(keys).forEach(function (key) {
+                if (utilities_4.hasOwn(oldValue, key) && utilities_4.hasOwn(newValue, key)) {
                     if (oldValue[key] != newValue[key])
                         node.style.setProperty(key, newValue[key]);
                 }
-                else if (utilities_3.hasOwn(newValue, key))
+                else if (utilities_4.hasOwn(newValue, key))
                     node.style.setProperty(key, newValue[key]);
                 else
                     node.style.removeProperty(key);
@@ -395,7 +417,7 @@ define("document", ["require", "exports", "utilities"], function (require, expor
     }());
     exports.ElementUtility = ElementUtility;
 });
-define("compile", ["require", "exports", "watcher", "mvvm", "utilities", "document"], function (require, exports, watcher_2, mvvm_2, utilities_4, document_1) {
+define("compile", ["require", "exports", "watcher", "mvvm", "utilities", "document"], function (require, exports, watcher_2, mvvm_2, utilities_5, document_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Compile = void 0;
@@ -458,7 +480,7 @@ define("compile", ["require", "exports", "watcher", "mvvm", "utilities", "docume
         Compile.prototype.compile = function (node) {
             var _this = this;
             var nodeAttrs = node.attributes;
-            utilities_4.toArray(nodeAttrs).forEach(function (attr) {
+            utilities_5.toArray(nodeAttrs).forEach(function (attr) {
                 var attrName = attr.name;
                 if (!isDirective(attrName))
                     return;
@@ -497,7 +519,7 @@ define("compile", ["require", "exports", "watcher", "mvvm", "utilities", "docume
     }());
     exports.Compile = Compile;
 });
-define("index", ["require", "exports", "compile", "dep", "document", "mvvm", "observer", "utilities", "watcher"], function (require, exports, compile_2, dep_3, document_2, mvvm_3, observer_2, utilities_5, watcher_3) {
+define("index", ["require", "exports", "compile", "dep", "document", "mvvm", "observer", "utilities", "watcher"], function (require, exports, compile_2, dep_3, document_2, mvvm_3, observer_2, utilities_6, watcher_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     __exportStar(compile_2, exports);
@@ -505,7 +527,7 @@ define("index", ["require", "exports", "compile", "dep", "document", "mvvm", "ob
     __exportStar(document_2, exports);
     __exportStar(mvvm_3, exports);
     __exportStar(observer_2, exports);
-    __exportStar(utilities_5, exports);
+    __exportStar(utilities_6, exports);
     __exportStar(watcher_3, exports);
 });
 //# sourceMappingURL=mvvm.js.map
