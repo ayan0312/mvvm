@@ -1,4 +1,4 @@
-import { hasOwn, unique } from 'src/utilities'
+import { hasOwn, unique } from './utilities'
 
 export type HTMLModelElement = HTMLInputElement
 export type HTMLStyle = Record<string, string>
@@ -9,6 +9,12 @@ export class ElementUtility {
             child: ChildNode
         while ((child = el.firstChild)) fragment.appendChild(child)
         return fragment
+    }
+
+    public static parseHTML(html: string): DocumentFragment {
+        let temp = document.createElement('div')
+        temp.innerHTML = html
+        return ElementUtility.fragment(temp)
     }
 
     public static isElementNode(node: unknown): node is Element {

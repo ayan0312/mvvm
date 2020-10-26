@@ -1,4 +1,4 @@
-import { Watcher } from 'src/watcher'
+import { Watcher } from './watcher'
 
 export type ID = string
 

@@ -5,7 +5,7 @@
     "main": "dist/mvvm.js",
     "unpkg": "dist/mvvm.js",
     "module": "dist/mvvm.esm.js",
-    "typings": "dist/types/index.d.ts",
+    "types": "dist/types/index.d.ts",
     "files": [
         "src/**/*",
         "dist/*.js",

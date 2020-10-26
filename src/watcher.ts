@@ -1,6 +1,6 @@
-import { Dep, ID } from 'src/dep'
-import { DataType, DataKey, MVVM, getVMVal } from 'src/mvvm'
-import { hasOwn, isFunction } from 'src/utilities'
+import { Dep, ID } from './dep'
+import { DataType, DataKey, MVVM, getVMVal } from './mvvm'
+import { hasOwn, isFunction } from './utilities'
 
 export type WatcherCallback = (newValue?: DataType, oldValue?: DataType) => void
 

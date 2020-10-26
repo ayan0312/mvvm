@@ -1,5 +1,5 @@
-import { Dep } from 'src/dep'
-import { Data, MVVM } from 'src/mvvm'
+import { Dep } from './dep'
+import { Data, MVVM } from './mvvm'
 import { hasOwn, isPlainObject } from './utilities'
 
 export function observe(

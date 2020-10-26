@@ -1,7 +1,7 @@
-import { Watcher } from 'src/watcher'
-import { getVMVal, MVVM, setVMVal, triggerLifecycleHook } from 'src/mvvm'
-import { isPlainObject, toArray } from 'src/utilities'
-import { ElementUtility, HTMLModelElement } from 'src/document'
+import { Watcher } from './watcher'
+import { getVMVal, MVVM, setVMVal } from './mvvm'
+import { toArray } from './utilities'
+import { ElementUtility, HTMLModelElement } from './document'
 
 function isDirective(attr: string): boolean {
     return attr.indexOf('v-') == 0
@@ -49,11 +49,11 @@ export class Compile {
 
         if (!this.$el) throw ''
 
-        triggerLifecycleHook(this.$vm, 'beforeMount')
+        this.$vm.emitLifecycle('beforeMount')
         this.$fragment = ElementUtility.fragment(this.$el)
         this.compileElement(this.$fragment)
         this.$el.appendChild(this.$fragment)
-        triggerLifecycleHook(this.$vm, 'mounted')
+        this.$vm.emitLifecycle('mounted')
     }
 
     public compileElement(el: DocumentFragment | ChildNode) {

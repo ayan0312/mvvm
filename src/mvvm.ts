@@ -1,8 +1,8 @@
-import { Watcher, WatcherCallback } from 'src/watcher'
-import { Compile } from 'src/compile'
-import { observe } from 'src/observer'
-import { extend, isFunction, NOOP } from 'src/utilities'
-import { Component } from 'src/component'
+import { Watcher, WatcherCallback } from './watcher'
+import { Compile } from './compile'
+import { observe } from './observer'
+import { extend, isFunction, NOOP } from './utilities'
+import { Component } from './component'
 
 export type DataType = any
 export interface Computed {
@@ -41,27 +41,38 @@ export interface MVVMOptions extends Partial<MVVMLifecycleHooks> {
     watch?: Record<keyof Data, WatcherCallback>
 }
 
-export function triggerLifecycleHook(vm: MVVM, hookName: LifecycleHookName) {
-    vm.$options[hookName] && vm.$options[hookName].call(vm)
+export function compileElement(defaultElement: HTMLElement) {
+    return (target: typeof MVVM) => {
+        const options = target.prototype.$options
+        target.prototype.$compile = new Compile(
+            'element' in options ? options.element : defaultElement,
+            target.prototype
+        )
+    }
 }
 
+@compileElement(document.body)
 export class MVVM {
     public $options: MVVMOptions
     public $compile: Compile
     public $data: Data
 
     constructor(options: MVVMOptions = {}) {
-        this.$options = options || {}
+        this.$options = options
         this.$options.components = extend(
             MVVM._components,
             this.$options.components || {}
         )
         this.$data = this.$options.data
         this._init()
-        this.$compile = new Compile(
-            'element' in options ? options.element : document.body,
-            this
-        )
+    }
+
+    public $watch(key: string, cb: WatcherCallback) {
+        new Watcher(this, key, cb)
+    }
+
+    public emitLifecycle(hookName: string) {
+        this.$options[hookName] && this.$options[hookName].call(this)
     }
 
     public static component(name: string, component: Component): void {
@@ -70,17 +81,13 @@ export class MVVM {
 
     public static _components: Record<string, Component>
 
-    public $watch(key: string, cb: WatcherCallback) {
-        new Watcher(this, key, cb)
-    }
-
     private _init() {
         this._initMethods()
-        triggerLifecycleHook(this, 'beforeCreate')
+        this.emitLifecycle('beforeCreate')
         this._initData()
         this._initComputed()
         this._initWatch()
-        triggerLifecycleHook(this, 'created')
+        this.emitLifecycle('created')
     }
 
     private _initMethods(): void {
@@ -95,7 +102,18 @@ export class MVVM {
     }
 
     private _initData(): void {
-        Object.keys(this.$data).forEach((key) => this._proxyData(key))
+        Object.keys(this.$data).forEach((key) =>
+            Object.defineProperty(this, key, {
+                configurable: false,
+                enumerable: true,
+                get: () => {
+                    return this.$data[key]
+                },
+                set: (newVal) => {
+                    this.$data[key] = newVal
+                },
+            })
+        )
         this.$data = observe(this.$data, this)
     }
 
@@ -118,19 +136,6 @@ export class MVVM {
             let object = watch[key]
             if (!isFunction(object)) return
             this.$watch(key, object)
-        })
-    }
-
-    private _proxyData(key: DataKey): void {
-        Object.defineProperty(this, key, {
-            configurable: false,
-            enumerable: true,
-            get: () => {
-                return this.$data[key]
-            },
-            set: (newVal) => {
-                this.$data[key] = newVal
-            },
         })
     }
 }
