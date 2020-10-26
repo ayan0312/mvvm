@@ -1,13 +1,26 @@
 {
     "name": "mvvm",
     "version": "1.0.0",
-    "main": "src/index.js",
+    "description": "",
+    "main": "dist/mvvm.js",
+    "unpkg": "dist/mvvm.js",
+    "module": "dist/mvvm.esm.js",
+    "typings": "dist/types/index.d.ts",
+    "files": [
+        "src/**/*",
+        "dist/*.js",
+        "dist/*.map",
+        "index.d.ts"
+    ],
     "scripts": {
-        "dev": "tsc --watch",
-        "build": "tsc",
-        "test": "",
+        "dev": "rollup -c --watch",
+        "build": "rollup -c && gzip-size dist/mvvm.js",
+        "test": "jest --coverage",
         "lint": "prettier --write \"src/**/*.(ts|tsx)\""
     },
+    "keywords": [],
+    "author": "ayan0312",
+    "license": "MIT",
     "lint-staged": {
         "src/**/*.(ts|tsx)": [
             "prettier --write"
@@ -19,16 +32,31 @@
     },
     "devDependencies": {
         "@types/jest": "^26.0.15",
-        "@types/node": "^14.11.11",
         "chalk": "^4.1.0",
+        "codecov": "^3.8.0",
+        "gzip-size-cli": "^3.0.0",
         "jest": "^26.6.0",
         "lint-staged": "^10.3.0",
         "prettier": "^2.1.1",
+        "rollup": "^2.32.1",
+        "rollup-plugin-terser": "^7.0.2",
+        "rollup-plugin-typescript2": "^0.28.0",
+        "terser": "^5.3.8",
+        "ts-jest": "^26.4.2",
         "typescript": "^4.0.3",
         "yorkie": "^2.0.0"
     },
-    "browserslist": [
-        "> 1%",
-        "last 2 versions"
-    ]
+    "jest": {
+        "coveragePathIgnorePatterns": [
+            "<rootDir>/test/test-util.tsx"
+        ],
+        "transform": {
+            ".(ts|tsx)": "ts-jest"
+        },
+        "moduleFileExtensions": [
+            "js",
+            "ts",
+            "tsx"
+        ]
+    }
 }

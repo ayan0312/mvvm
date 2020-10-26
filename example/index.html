@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>MVVM</title>
+    <style>
+        .textInput {
+            border: 1px solid #000;
+        }
+
+        .red {
+            color: red;
+            background: blue;
+        }
+
+        .blue {
+            color: blue;
+            background: red;
+        }
+
+        .yellow {
+            color: yellow;
+            background: grey;
+        }
+
+        .grey {
+            color: grey;
+            background: yellow;
+        }
+
+        .gold {
+            color: gold;
+            background: black;
+        }
+
+        .black {
+            color: black;
+            background: gold;
+        }
+
+        .white {
+            color: white;
+            background: red;
+        }
+
+        .test {
+            border: 1px solid #000;
+            padding: 10px;
+        }
+
+        .test_box {
+            border: 1px solid #000;
+            padding: 10px;
+            margin: 10px;
+            display: inline-block;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <div class="test" id="test_1">
+            <button v-on:click="displayController">显示/隐藏</button>
+            <div v-show="display">
+                <input class="textInput" v-style="fontSizeStyle" v-class="numberInputClass" disabled type="text"
+                    v-model="number.input">
+                <button v-on:click="increase1">increase 1</button>
+                <button v-on:click="increase10">increase 10</button>
+                <button v-on:click="decrease10">decrease 10</button>
+                <button v-on:click="switchInputTextColor">switch schema of the input</button>
+                <p>{{ getInformation }}</p>
+                <p>{{ getInputNumberOver100TimesInformation }}</p>
+            </div>
+        </div>
+        <div class="test" id="test_2">
+            <button v-on:click="setNewObject">set a new object</button>
+            <button v-on:click="deleteNewObject">delete the new object</button>
+            <p>
+                <span>新建对象：</span>
+                <span> {{ tempObject }}</span>
+            </p>
+        </div>
+    </div>
+    <script type="module">
+        import { MVVM } from './mvvm.esm.js'
+        const vm = new MVVM({
+            el: '#app',
+            data: {
+                number: {
+                    input: 0,
+                    click: 0
+                },
+                display: true,
+                tempObject: {},
+                fontSizeStyle: { 'font-size': '14px' },
+                inputNumberOver100Times: 0,
+                numberInputClass: 'red',
+                inputClassesIndex: 0,
+                inputClasses: ['red', 'blue', 'yellow', 'grey', 'gold', 'black', 'white']
+            },
+            computed: {
+                getInformation() {
+                    return `点击次数:${this.number.click} 增量:${this.number.input}`
+                },
+                getInputNumberOver100TimesInformation() {
+                    return `增量超过100的次数:${this.inputNumberOver100Times}`
+                }
+            },
+            watch: {
+                "number.input": function (newVal, oldVal) {
+                    if (newVal >= 100 && oldVal < 100)
+                        this.inputNumberOver100Times += 1
+                },
+                "number.click": function (newVal, oldVal) {
+                    this.fontSizeStyle = {
+                        'font-size': 14 + newVal + 'px'
+                    }
+                }
+            },
+            methods: {
+                setNewObject(e) {
+                    this.tempObject.test = {
+                        name: 'test',
+                        type: 'test'
+                    }
+                },
+                deleteNewObject(e) {
+                    delete this.tempObject.test
+                },
+                displayController(e) {
+                    this.display = !this.display
+                },
+                increaseClickNumber() {
+                    this.number.click += 1
+                },
+                increase1(e) {
+                    this.number.input += 1
+                    this.increaseClickNumber()
+                },
+                increase10(e) {
+                    this.number.input += 10
+                    this.increaseClickNumber()
+                },
+                decrease10(e) {
+                    this.number.input -= 10
+                    this.increaseClickNumber()
+                },
+                switchInputTextColor(e) {
+                    this.inputClassesIndex += 1
+                    if (this.inputClassesIndex === this.inputClasses.length)
+                        this.inputClassesIndex = 0
+                    this.numberInputClass = this.inputClasses[this.inputClassesIndex]
+                    this.increaseClickNumber()
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>
