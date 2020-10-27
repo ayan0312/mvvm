@@ -3,6 +3,7 @@ import { Compile } from './compile'
 import { observe } from './observer'
 import { extend, isFunction, NOOP } from './utilities'
 import { Component } from './component'
+import { EventEmitter } from './events'
 
 export type DataType = any
 export interface Computed {
@@ -41,21 +42,25 @@ export interface MVVMOptions extends Partial<MVVMLifecycleHooks> {
     watch?: Record<keyof Data, WatcherCallback>
 }
 
-export function compileElement(defaultElement: HTMLElement) {
-    return (target: typeof MVVM) => {
-        const options = target.prototype.$options
-        target.prototype.$compile = new Compile(
-            'element' in options ? options.element : defaultElement,
-            target.prototype
-        )
+export function getApplyFunction<T>(fn: Function, scope: T) {
+    return function () {
+        fn.apply(scope, arguments)
     }
 }
 
-@compileElement(document.body)
 export class MVVM {
     public $options: MVVMOptions
     public $compile: Compile
     public $data: Data
+    public $event: EventEmitter<MVVM> = new EventEmitter(this)
+
+    public $on = getApplyFunction(this.$event.on, this.$event)
+    public $emit = getApplyFunction(this.$event.emit, this.$event)
+    public $off = getApplyFunction(this.$event.off, this.$event)
+    public $once = getApplyFunction(this.$event.once, this.$event)
+    public $watch(key: string, cb: WatcherCallback) {
+        new Watcher(this, key, cb)
+    }
 
     constructor(options: MVVMOptions = {}) {
         this.$options = options
@@ -65,10 +70,10 @@ export class MVVM {
         )
         this.$data = this.$options.data
         this._init()
-    }
-
-    public $watch(key: string, cb: WatcherCallback) {
-        new Watcher(this, key, cb)
+        this.$compile = new Compile(
+            'element' in options ? options.element : document.body,
+            this
+        )
     }
 
     public emitLifecycle(hookName: string) {
@@ -100,6 +105,8 @@ export class MVVM {
             this[key] = object
         })
     }
+
+    private _initLifecycle() {}
 
     private _initData(): void {
         Object.keys(this.$data).forEach((key) =>

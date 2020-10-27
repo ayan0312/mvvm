@@ -38,28 +38,6 @@ class Dep {
 }
 Dep.target = null;
 
-/*! *****************************************************************************
-Copyright (c) Microsoft Corporation.
-
-Permission to use, copy, modify, and/or distribute this software for any
-purpose with or without fee is hereby granted.
-
-THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
-REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
-AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
-INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
-LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
-OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
-PERFORMANCE OF THIS SOFTWARE.
-***************************************************************************** */
-
-function __decorate(decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-}
-
 const extend = (a, b) => {
     for (const key in b) {
         a[key] = b[key];
@@ -116,19 +94,68 @@ class Observer {
     }
 }
 
-var MVVM_1;
-function compileElement(defaultElement) {
-    return (target) => {
-        const options = target.prototype.$options;
-        target.prototype.$compile = new Compile('element' in options ? options.element : defaultElement, target.prototype);
+class EventEmitter {
+    constructor(scope) {
+        this._events = new Map();
+        if (scope)
+            this._scope = scope;
+    }
+    on(eventName, callback) {
+        if (!this._events.has(eventName))
+            this._events.set(eventName, []);
+        this._events.get(eventName).push(callback);
+    }
+    emit(eventName, value) {
+        if (!this._events.has(eventName))
+            return;
+        this._events.get(eventName).forEach((callback) => {
+            if (isFunction(callback)) {
+                if (this._scope)
+                    callback.call(this._scope, value);
+                else
+                    callback(value);
+            }
+        });
+    }
+    off(eventName, callback) {
+        if (callback) {
+            this._events.set(eventName, this._events.get(eventName).filter((cb) => {
+                if (cb === callback || cb.originFunction === callback)
+                    return false;
+            }));
+        }
+        else {
+            this._events.delete(eventName);
+        }
+    }
+    once(eventName, callback) {
+        const self = this;
+        const onceCallback = function () {
+            self.off(eventName, onceCallback);
+            callback.apply(self, arguments);
+        };
+        onceCallback.originFunction = callback;
+        this.on(eventName, onceCallback);
+    }
+}
+
+function getApplyFunction(fn, scope) {
+    return function () {
+        fn.apply(scope, arguments);
     };
 }
-let MVVM = MVVM_1 = class MVVM {
+class MVVM {
     constructor(options = {}) {
+        this.$event = new EventEmitter(this);
+        this.$on = getApplyFunction(this.$event.on, this.$event);
+        this.$emit = getApplyFunction(this.$event.emit, this.$event);
+        this.$off = getApplyFunction(this.$event.off, this.$event);
+        this.$once = getApplyFunction(this.$event.once, this.$event);
         this.$options = options;
-        this.$options.components = extend(MVVM_1._components, this.$options.components || {});
+        this.$options.components = extend(MVVM._components, this.$options.components || {});
         this.$data = this.$options.data;
         this._init();
+        this.$compile = new Compile('element' in options ? options.element : document.body, this);
     }
     $watch(key, cb) {
         new Watcher(this, key, cb);
@@ -137,7 +164,7 @@ let MVVM = MVVM_1 = class MVVM {
         this.$options[hookName] && this.$options[hookName].call(this);
     }
     static component(name, component) {
-        MVVM_1._components[name] = component;
+        MVVM._components[name] = component;
     }
     _init() {
         this._initMethods();
@@ -159,6 +186,8 @@ let MVVM = MVVM_1 = class MVVM {
                 return;
             this[key] = object;
         });
+    }
+    _initLifecycle() {
     }
     _initData() {
         Object.keys(this.$data).forEach((key) => Object.defineProperty(this, key, {
@@ -196,10 +225,7 @@ let MVVM = MVVM_1 = class MVVM {
             this.$watch(key, object);
         });
     }
-};
-MVVM = MVVM_1 = __decorate([
-    compileElement(document.body)
-], MVVM);
+}
 function getVMVal(vm, exp) {
     let temp;
     exp.split('.').forEach((k, i) => {
@@ -430,5 +456,5 @@ class Compile {
     }
 }
 
-export { Compile, Dep, ElementUtility, MVVM, NOOP, Observer, Watcher, compileElement, extend, getId, getSequence, getVMVal, hasOwn, isFunction, isPlainObject, objectToString, observe, parseGetter, setVMVal, toArray, toTypeString, unique };
+export { Compile, Dep, ElementUtility, MVVM, NOOP, Observer, Watcher, extend, getApplyFunction, getId, getSequence, getVMVal, hasOwn, isFunction, isPlainObject, objectToString, observe, parseGetter, setVMVal, toArray, toTypeString, unique };
 //# sourceMappingURL=mvvm.esm.js.map
