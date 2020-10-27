@@ -43,6 +43,7 @@ export class Observer {
                     ob.dep.delete()
                     ob = null
                     result = Reflect.deleteProperty(target, key)
+                    target.__ob__.dep.notify()
                 }
                 return result
             },
