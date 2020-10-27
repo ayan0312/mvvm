@@ -42,10 +42,11 @@ export interface MVVMOptions extends Partial<MVVMLifecycleHooks> {
     watch?: Record<keyof Data, WatcherCallback>
 }
 
-export function getApplyFunction<T>(fn: Function, scope: T) {
-    return function () {
+export function getApplyFunction<T extends Function, R>(fn: T, scope: R): T {
+    const func: any = function () {
         fn.apply(scope, arguments)
     }
+    return func
 }
 
 export class MVVM {
@@ -53,6 +54,7 @@ export class MVVM {
     public $compile: Compile
     public $data: Data
     public $event: EventEmitter<MVVM> = new EventEmitter(this)
+    public $el: Element
 
     public $on = getApplyFunction(this.$event.on, this.$event)
     public $emit = getApplyFunction(this.$event.emit, this.$event)
@@ -68,7 +70,6 @@ export class MVVM {
             MVVM._components,
             this.$options.components || {}
         )
-        this.$data = this.$options.data
         this._init()
         this.$compile = new Compile(
             'element' in options ? options.element : document.body,
@@ -88,11 +89,12 @@ export class MVVM {
 
     private _init() {
         this._initMethods()
-        this.emitLifecycle('beforeCreate')
+        this._initLifecycle()
+        this.$emit('beforeCreate')
         this._initData()
         this._initComputed()
         this._initWatch()
-        this.emitLifecycle('created')
+        this.$emit('created')
     }
 
     private _initMethods(): void {
@@ -106,9 +108,20 @@ export class MVVM {
         })
     }
 
-    private _initLifecycle() {}
+    private _initLifecycle() {
+        this.$options.beforeCreate &&
+            this.$on('beforeCreate', this.$options.beforeCreate)
+        this.$options.created && this.$on('created', this.$options.created)
+        this.$options.beforeMount &&
+            this.$on('beforeMount', this.$options.beforeMount)
+        this.$options.mounted && this.$on('mounted', this.$options.mounted)
+        this.$options.beforeUpdate &&
+            this.$on('beforeUpdate', this.$options.beforeUpdate)
+        this.$options.updated && this.$on('updated', this.$options.updated)
+    }
 
     private _initData(): void {
+        this.$data = this.$options.data
         Object.keys(this.$data).forEach((key) =>
             Object.defineProperty(this, key, {
                 configurable: false,
@@ -130,8 +143,16 @@ export class MVVM {
         Object.keys(computed).forEach((key) => {
             let object = computed[key]
             Object.defineProperty(this, key, {
-                get: isFunction(object) ? object : object.get,
-                set: NOOP,
+                get: isFunction(object)
+                    ? object
+                    : 'get' in object
+                    ? object.get
+                    : NOOP,
+                set: isFunction(object)
+                    ? object
+                    : 'set' in object
+                    ? object.set
+                    : NOOP,
             })
         })
     }

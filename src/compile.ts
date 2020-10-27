@@ -48,12 +48,14 @@ export class Compile {
             : document.querySelector(el)
 
         if (!this.$el) throw ''
+        this.$vm.$el = this.$el
+        this.$vm.$emit('beforeMount')
 
-        this.$vm.emitLifecycle('beforeMount')
         this.$fragment = ElementUtility.fragment(this.$el)
         this.compileElement(this.$fragment)
         this.$el.appendChild(this.$fragment)
-        this.$vm.emitLifecycle('mounted')
+
+        this.$vm.$emit('mounted')
     }
 
     public compileElement(el: DocumentFragment | ChildNode) {
