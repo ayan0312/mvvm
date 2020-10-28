@@ -10,8 +10,8 @@ function getId(name) {
 }
 class Dep {
     constructor(name) {
-        this.id = getId(name);
         this.subs = [];
+        this.id = getId(name);
     }
     delete() {
         if (this.subs.length < 1)
@@ -20,7 +20,7 @@ class Dep {
         this.subs.forEach((sub) => {
             sub.removeDep(this);
         });
-        this.subs = [];
+        this.subs.length = 0;
     }
     addSub(sub) {
         this.subs.push(sub);
@@ -87,6 +87,7 @@ class Observer {
                     ob.dep.delete();
                     ob = null;
                     result = Reflect.deleteProperty(target, key);
+                    this.dep.notify();
                 }
                 return result;
             },
@@ -139,40 +140,108 @@ class EventEmitter {
     }
 }
 
+var EventLoop;
+(function (EventLoop) {
+    const callbacks = [];
+    const p = Promise.resolve();
+    let pending = false;
+    let useMacroTask = false;
+    function flushCallbacks() {
+        pending = false;
+        const copies = callbacks.slice(0);
+        callbacks.length = 0;
+        copies.forEach((fn) => fn());
+    }
+    EventLoop.flushCallbacks = flushCallbacks;
+    const macroTimerFunction = () => {
+        setTimeout(flushCallbacks, 0);
+    };
+    const microTimerFunction = () => {
+        p.then(flushCallbacks);
+    };
+    function withMacroTask(fn) {
+        return (fn._withTask ||
+            (fn._withTask = function () {
+                useMacroTask = true;
+                const res = fn.apply(null, arguments);
+                useMacroTask = false;
+                return res;
+            }));
+    }
+    EventLoop.withMacroTask = withMacroTask;
+    function nextTick(context, callback) {
+        let _resolve;
+        callbacks.push(() => {
+            if (callback)
+                callback.call(context);
+            else if (_resolve)
+                _resolve(context);
+        });
+        if (!pending) {
+            pending = true;
+            if (useMacroTask)
+                macroTimerFunction();
+            else
+                microTimerFunction();
+        }
+        if (!callback)
+            return new Promise((resolve) => {
+                _resolve = resolve;
+            });
+    }
+    EventLoop.nextTick = nextTick;
+})(EventLoop || (EventLoop = {}));
+
 function getApplyFunction(fn, scope) {
-    return function () {
+    const func = function () {
         fn.apply(scope, arguments);
     };
+    return func;
 }
+const createVM = (options = {}) => new MVVM(extend(options, {
+    element: options.element ? options.element : document.body
+}));
 class MVVM {
     constructor(options = {}) {
         this.$event = new EventEmitter(this);
+        this.$children = {};
+        this.$refs = {};
         this.$on = getApplyFunction(this.$event.on, this.$event);
         this.$emit = getApplyFunction(this.$event.emit, this.$event);
         this.$off = getApplyFunction(this.$event.off, this.$event);
         this.$once = getApplyFunction(this.$event.once, this.$event);
         this.$options = options;
-        this.$options.components = extend(MVVM._components, this.$options.components || {});
-        this.$data = this.$options.data;
+        this.components = options.components;
+        MVVM.cid += 1;
+        this.cid = MVVM.cid;
         this._init();
-        this.$compile = new Compile('element' in options ? options.element : document.body, this);
+        if (this.$options.element)
+            this.compile(this.$options.element);
     }
     $watch(key, cb) {
         new Watcher(this, key, cb);
     }
-    emitLifecycle(hookName) {
-        this.$options[hookName] && this.$options[hookName].call(this);
+    $nextTick(callback) {
+        if (callback)
+            return EventLoop.nextTick(this, callback);
+        return EventLoop.nextTick(this);
     }
-    static component(name, component) {
-        MVVM._components[name] = component;
+    use(fn) {
+        fn.call(this, this);
+        return this;
+    }
+    compile(element) {
+        this.$compile = new Compile(element, this);
+        this.$emit('mounted');
     }
     _init() {
         this._initMethods();
-        this.emitLifecycle('beforeCreate');
+        this._initLifecycle();
+        this.$emit('beforeCreate');
         this._initData();
         this._initComputed();
         this._initWatch();
-        this.emitLifecycle('created');
+        this.$emit('created');
     }
     _initMethods() {
         let methods = this.$options.methods;
@@ -188,8 +257,19 @@ class MVVM {
         });
     }
     _initLifecycle() {
+        this.$options.beforeCreate &&
+            this.$on('beforeCreate', this.$options.beforeCreate);
+        this.$options.created && this.$on('created', this.$options.created);
+        this.$options.beforeMount &&
+            this.$on('beforeMount', this.$options.beforeMount);
+        this.$options.mounted && this.$on('mounted', this.$options.mounted);
+        this.$options.beforeUpdate &&
+            this.$on('beforeUpdate', this.$options.beforeUpdate);
+        this.$options.updated && this.$on('updated', this.$options.updated);
     }
     _initData() {
+        const data = this.$options.data;
+        this.$data = isFunction(data) ? data() : data;
         Object.keys(this.$data).forEach((key) => Object.defineProperty(this, key, {
             configurable: false,
             enumerable: true,
@@ -204,13 +284,21 @@ class MVVM {
     }
     _initComputed() {
         let computed = this.$options.computed;
-        if (typeof computed !== 'object')
+        if (!isPlainObject(computed))
             return;
         Object.keys(computed).forEach((key) => {
             let object = computed[key];
             Object.defineProperty(this, key, {
-                get: isFunction(object) ? object : object.get,
-                set: NOOP,
+                get: isFunction(object)
+                    ? object
+                    : 'get' in object
+                        ? object.get
+                        : NOOP,
+                set: isFunction(object)
+                    ? object
+                    : 'set' in object
+                        ? object.set
+                        : NOOP,
             });
         });
     }
@@ -226,6 +314,7 @@ class MVVM {
         });
     }
 }
+MVVM.cid = 0;
 function getVMVal(vm, exp) {
     let temp;
     exp.split('.').forEach((k, i) => {
@@ -256,15 +345,14 @@ function parseGetter(exp) {
     return (vm) => getVMVal(vm, exp);
 }
 class Watcher {
-    constructor(vm, expOrFn, cb) {
-        this.cb = cb;
+    constructor(vm, expOrFn, callback) {
+        this.callback = callback;
         this.vm = vm;
-        this.expOrFn = expOrFn;
-        this.depIds = {};
+        this._depIds = {};
         if (isFunction(expOrFn))
-            this.getter = expOrFn;
+            this._getter = expOrFn;
         else
-            this.getter = parseGetter(expOrFn.trim());
+            this._getter = parseGetter(expOrFn.trim());
         this.value = this.get();
     }
     update() {
@@ -272,21 +360,21 @@ class Watcher {
         let oldVal = this.value;
         if (newValue !== oldVal) {
             this.value = newValue;
-            this.cb.call(this.vm, newValue, oldVal);
+            this.callback.call(this.vm, newValue, oldVal);
         }
     }
     removeDep(dep) {
-        delete this.depIds[dep.id];
+        delete this._depIds[dep.id];
     }
     addDep(dep) {
-        if (!hasOwn(this.depIds, dep.id)) {
+        if (!hasOwn(this._depIds, dep.id)) {
             dep.addSub(this);
-            this.depIds[dep.id] = dep;
+            this._depIds[dep.id] = dep;
         }
     }
     get() {
         Dep.target = this;
-        let value = this.getter.call(this.vm, this.vm);
+        let value = this._getter.call(this.vm, this.vm);
         Dep.target = null;
         return value;
     }
@@ -300,9 +388,9 @@ class ElementUtility {
         return fragment;
     }
     static parseHTML(html) {
-        let temp = document.createElement('div');
-        temp.innerHTML = html;
-        return ElementUtility.fragment(temp);
+        const domParser = new DOMParser();
+        let temp = domParser.parseFromString(html, 'text/html');
+        return temp.body.children;
     }
     static isElementNode(node) {
         if (node instanceof Element)
@@ -362,12 +450,22 @@ class ElementUtility {
     }
 }
 
-function isDirective(attr) {
-    return attr.indexOf('v-') == 0;
+class MVVMComponent extends MVVM {
+    constructor(options) {
+        super(options);
+        this.$template = options.template || '';
+        if (options.parent)
+            this.$parent = options.parent;
+    }
+    $mount(element) {
+        this.compile(element);
+    }
 }
+
 const parseAnyDirectiveFunction = (parseString) => {
-    return (dir) => dir.indexOf(parseString) === 0;
+    return (dir) => dir.indexOf(parseString) == 0;
 };
+const isDirective = parseAnyDirectiveFunction('v-');
 const isEventDirective = parseAnyDirectiveFunction('on');
 const isTextDirective = parseAnyDirectiveFunction('text');
 const isHtmlDirective = parseAnyDirectiveFunction('html');
@@ -375,8 +473,16 @@ const isModelDirective = parseAnyDirectiveFunction('model');
 const isClassDirective = parseAnyDirectiveFunction('class');
 const isStyleDirective = parseAnyDirectiveFunction('style');
 const isShowDirective = parseAnyDirectiveFunction('show');
+const isRefDirective = parseAnyDirectiveFunction('ref');
+const isForDirective = parseAnyDirectiveFunction('for');
 function bindWatcher(node, vm, exp, updater) {
-    let val = getVMVal(vm, exp);
+    let __for__ = node['__for__'];
+    let val;
+    if (__for__) {
+        val = __for__ ? __for__[exp] : '';
+    }
+    else
+        val = getVMVal(vm, exp);
     updater && updater(node, val);
     new Watcher(vm, exp, (newValue, oldValue) => {
         if (newValue === oldValue)
@@ -390,29 +496,138 @@ function eventHandler(node, vm, exp, eventType) {
         node.addEventListener(eventType, fn.bind(vm), false);
     }
 }
+function vFor(node, vm, exp, c) {
+    let reg = /\((.*)\)/;
+    let item, index, list;
+    if (reg.test(exp)) {
+        const arr = RegExp.$1.trim().split(',');
+        item = arr[0];
+        index = arr[1];
+        let rightString = RegExp.rightContext.trim();
+        let rarr = rightString.split(' ');
+        list = rarr[1];
+        if (rarr[0] !== 'in')
+            return;
+        let val = getVMVal(vm, list);
+        let children = [];
+        toArray(node.children).forEach((element) => {
+            children.push(element.cloneNode(true));
+            node.removeChild(element);
+        });
+        for (let i = 0; i < val.length; i++) {
+            children.forEach((element) => {
+                let newNode = element.cloneNode(true);
+                newNode.__for__ = {
+                    [item]: val[i],
+                    [index]: i
+                };
+                node.appendChild(newNode);
+                c.compileElement(node);
+            });
+        }
+    }
+}
+function forHandler(node, vm, exp, c) {
+    vFor(node, vm, exp, c);
+    new Watcher(vm, exp, (newValue, oldValue) => {
+        if (newValue === oldValue)
+            return;
+        vFor(node, vm, exp, c);
+    });
+}
 class Compile {
     constructor(el, vm) {
+        this.slotCallback = [];
         this.$vm = vm;
         this.$el = ElementUtility.isElementNode(el)
             ? el
             : document.querySelector(el);
-        if (!this.$el)
-            throw '';
-        this.$vm.emitLifecycle('beforeMount');
-        this.$fragment = ElementUtility.fragment(this.$el);
-        this.compileElement(this.$fragment);
-        this.$el.appendChild(this.$fragment);
-        this.$vm.emitLifecycle('mounted');
+        this._init();
+    }
+    _init() {
+        if (this.$vm instanceof MVVMComponent) {
+            this.$slot = ElementUtility.fragment(this.$el);
+            this.$fragment = this.parseComponentTemplate(this.$vm.$template);
+            this.$vm.$el = this.$el;
+            this.$vm.$emit('beforeMount');
+            this.compileElement(this.$fragment);
+            this.$el.parentNode.replaceChild(this.$fragment, this.$el);
+        }
+        else {
+            this.$fragment = ElementUtility.fragment(this.$el);
+            this.$vm.$el = this.$el;
+            this.$vm.$emit('beforeMount');
+            this.compileElement(this.$fragment);
+            this.$el.appendChild(this.$fragment);
+        }
+        Object.entries(this.$vm.$children).forEach(([key, child]) => {
+            const slotCallback = child.$compile.slotCallback;
+            if (slotCallback.length < 1)
+                return;
+            slotCallback.forEach((fn) => {
+                fn(this);
+            });
+        });
+    }
+    isSlot(node) {
+        if (node.tagName === 'SLOT')
+            return true;
+        return false;
+    }
+    compileSlotElement(slot) {
+        if (!(this.$vm instanceof MVVMComponent))
+            return;
+        if (this.$slot.children.length === 0) {
+            slot.parentNode.removeChild(slot);
+            return;
+        }
+        this.slotCallback.push(c => {
+            c.compileElement(this.$slot);
+            slot.parentNode.replaceChild(this.$slot, slot);
+        });
+    }
+    parseComponentTemplate(templateHTML) {
+        let element = ElementUtility.parseHTML(templateHTML);
+        const template = document.createElement('template');
+        if (element.length) {
+            if (element.length === 1) {
+                if (element[0].tagName.toLowerCase() !== 'template')
+                    template.appendChild(element[0]);
+            }
+            else
+                toArray(element).forEach((child) => {
+                    template.appendChild(child);
+                });
+        }
+        return ElementUtility.fragment(template);
+    }
+    parseTemplate(leftString, rightString) {
+        return (node, newValue, oldValue) => {
+            const str = leftString + newValue + rightString;
+            ElementUtility.text(node, str);
+        };
     }
     compileElement(el) {
         let childNodes = el.childNodes;
         childNodes.forEach((node) => {
+            if (el['__for__'])
+                node['__for__'] = el['__for__'];
             let reg = /\{\{(.*)\}\}/;
-            if (ElementUtility.isElementNode(node))
-                this.compile(node);
+            if (ElementUtility.isElementNode(node)) {
+                if (this.isComponent(node)) {
+                    this.compileComponent(node.tagName.toLowerCase(), node);
+                    return;
+                }
+                else if (this.isSlot(node)) {
+                    this.compileSlotElement(node);
+                    return;
+                }
+                else
+                    this.compile(node);
+            }
             else if (ElementUtility.isTextNode(node) &&
                 reg.test(node.textContent))
-                bindWatcher(node, this.$vm, RegExp.$1.trim(), ElementUtility.text);
+                bindWatcher(node, this.$vm, RegExp.$1.trim(), this.parseTemplate(RegExp.leftContext, RegExp.rightContext));
             if (node.childNodes && node.childNodes.length)
                 this.compileElement(node);
         });
@@ -423,12 +638,11 @@ class Compile {
             let attrName = attr.name;
             if (!isDirective(attrName))
                 return;
-            let exp = attr.value;
             let dir = attrName.substring(2);
-            if (isEventDirective(dir)) {
-                let eventType = dir.split(':')[1];
-                eventHandler(node, this.$vm, exp, eventType);
-            }
+            let suffix = dir.split(':')[1];
+            let exp = attr.value || suffix;
+            if (isEventDirective(dir))
+                eventHandler(node, this.$vm, exp, suffix);
             else if (isTextDirective(dir))
                 bindWatcher(node, this.$vm, exp, ElementUtility.text);
             else if (isHtmlDirective(dir))
@@ -451,10 +665,30 @@ class Compile {
                 bindWatcher(node, this.$vm, exp, ElementUtility.style);
             else if (isShowDirective(dir))
                 bindWatcher(node, this.$vm, exp, ElementUtility.display);
+            else if (isRefDirective(dir))
+                this.$vm.$refs[exp] = node;
+            else if (isForDirective(dir))
+                forHandler(node, this.$vm, exp, this);
             node.removeAttribute(attrName);
         });
     }
+    isComponent(node) {
+        const tagName = node.tagName.toLowerCase();
+        if (!/^[(a-zA-Z)-]*$/.test(tagName))
+            return false;
+        if (this.$vm.components && hasOwn(this.$vm.components, tagName))
+            return true;
+        return false;
+    }
+    compileComponent(componentName, node) {
+        const componentOptions = this.$vm.components[componentName];
+        const component = new MVVMComponent(extend(componentOptions, {
+            parent: this.$vm
+        }));
+        component.$mount(node);
+        this.$vm.$children[componentName] = component;
+    }
 }
 
-export { Compile, Dep, ElementUtility, MVVM, NOOP, Observer, Watcher, extend, getApplyFunction, getId, getSequence, getVMVal, hasOwn, isFunction, isPlainObject, objectToString, observe, parseGetter, setVMVal, toArray, toTypeString, unique };
+export { Compile, Dep, ElementUtility, EventEmitter, EventLoop, MVVM, MVVMComponent, NOOP, Observer, Watcher, createVM, extend, getApplyFunction, getId, getSequence, getVMVal, hasOwn, isFunction, isPlainObject, objectToString, observe, parseGetter, setVMVal, toArray, toTypeString, unique };
 //# sourceMappingURL=mvvm.esm.js.map

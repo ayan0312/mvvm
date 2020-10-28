@@ -6,8 +6,8 @@ export type EventEmitterCallback<T = any> = {
 }
 
 export class EventEmitter<Scope = any> {
-    private _events: Map<string, EventEmitterCallback[]>
-    private _scope?: Scope
+    private readonly _events: Map<string, EventEmitterCallback[]>
+    private readonly _scope?: Scope
 
     constructor(scope?: Scope) {
         this._events = new Map<string, EventEmitterCallback[]>()

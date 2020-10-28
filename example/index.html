@@ -60,11 +60,30 @@
 
 <body>
     <div id="app">
+        <my-title>
+            <p>
+                {{p}}
+            </p>
+        </my-title>
         <div class="test" id="test_1">
+            <label>
+                内容：
+                <textarea v-model="p" placeholder="内容"></textarea>
+            </label>
+            <div v-for="(item,index) in inputClasses">
+                <div>
+                    <div>
+                        <p>inputClasses</p>
+                        <span>{{ index }}: </span>
+                        <span>{{item}}</span>
+                    </div>
+                </div>
+            </div>
+            <br />
             <button v-on:click="displayController">显示/隐藏</button>
-            <div v-show="display">
+            <div v-show:display>
                 <input class="textInput" v-style="fontSizeStyle" v-class="numberInputClass" disabled type="text"
-                    v-model="number.input">
+                    v-model:number.input>
                 <button v-on:click="increase1">increase 1</button>
                 <button v-on:click="increase10">increase 10</button>
                 <button v-on:click="decrease10">decrease 10</button>
@@ -78,19 +97,66 @@
             <button v-on:click="deleteNewObject">delete the new object</button>
             <p>
                 <span>新建对象：</span>
-                <span> {{ tempObject }}</span>
+                <span> {{ getNewObject }}</span>
             </p>
         </div>
+        <my-footer />
     </div>
+    <div id="app2"></div>
     <script type="module">
-        import { MVVM } from './mvvm.esm.js'
-        const vm = new MVVM({
-            el: '#app',
+        import { createVM, MVVMComponent } from './mvvm.esm.js'
+        const MyTitle = {
+            data() {
+                return {
+                    title: '标题',
+                }
+            },
+            template: `
+                <div class="test">
+                    <h1 v-ref="title1"> {{ title }}1 </h2>
+                    <h2> {{ title }}2 </h2>
+                    <slot></slot>
+                    <label>
+                        标题：
+                        <input v-model="title" type="text" placeholder="修改标题" />
+                    </label>
+                </div>
+            `
+        }
+
+        const MyFooter = {
+            data() {
+                return {
+                    title: '尾部',
+                }
+            },
+            template: `
+                <div class="test">
+                    <h1 v-ref="title1"> {{ title }} </h2>
+                </div>
+            `,
+            mounted() {
+                this.$refs.title1.textContent = '尾部:ref取element改变文字'
+                console.log('before nextTick')
+                this.$nextTick().then(() => {
+                    console.log('nextTick(micro)')
+                })
+                console.log('after nextTick')
+            }
+        }
+
+        const vm = createVM({
+            element: '#app',
+            components: {
+                'my-title': MyTitle,
+                'my-footer': MyFooter
+            },
             data: {
                 number: {
                     input: 0,
                     click: 0
                 },
+                p: '这里是内容',
                 display: true,
                 tempObject: {},
                 fontSizeStyle: { 'font-size': '14px' },
@@ -105,6 +171,10 @@
                 },
                 getInputNumberOver100TimesInformation() {
                     return `增量超过100的次数:${this.inputNumberOver100Times}`
+                },
+                getNewObject() {
+                    const a = this.tempObject.test
+                    return a ? `${a.name}` : a
                 }
             },
             watch: {
@@ -124,12 +194,16 @@
             methods: {
                 setNewObject(e) {
                     this.tempObject.test = {
-                        name: 'test',
-                        type: 'test'
+                        name: 'test'
                     }
+                    console.log('create test', this.tempObject)
                 },
+
                 deleteNewObject(e) {
-                    delete this.tempObject.test
+                    if ('test' in this.tempObject) {
+                        delete this.tempObject.test
+                    }
+                    console.log('delete test', this.tempObject)
                 },
                 displayController(e) {
                     this.display = !this.display
@@ -167,6 +241,9 @@
         vm.$once('over100Times', function () {
             console.log('over 100!')
         })
+
+        const cVM = new MVVMComponent(MyTitle)
+        cVM.$mount('#app2')
     </script>
 </body>
 

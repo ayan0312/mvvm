@@ -11,10 +11,10 @@ export class ElementUtility {
         return fragment
     }
 
-    public static parseHTML(html: string): DocumentFragment {
-        let temp = document.createElement('div')
-        temp.innerHTML = html
-        return ElementUtility.fragment(temp)
+    public static parseHTML(html: string): HTMLCollection {
+        const domParser = new DOMParser()
+        let temp: Document = domParser.parseFromString(html, 'text/html')
+        return temp.body.children
     }
 
     public static isElementNode(node: unknown): node is Element {
@@ -53,7 +53,7 @@ export class ElementUtility {
         node: HTMLElement,
         newValue: HTMLStyle,
         oldValue: HTMLStyle
-    ) {
+    ): void {
         if (!oldValue) oldValue = {}
         if (!newValue) newValue = {}
         const keys = Object.keys(oldValue).concat(Object.keys(newValue))
@@ -71,7 +71,7 @@ export class ElementUtility {
         node: HTMLElement,
         newValue: boolean,
         oldValue: boolean
-    ) {
+    ): void {
         let func = (val) => {
             return {
                 display: val ? 'block' : 'none',

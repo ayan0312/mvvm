@@ -11,25 +11,22 @@ export function parseGetter(exp: string): (vm: MVVM) => DataType {
     return (vm: MVVM): DataType => getVMVal(vm, exp)
 }
 
-/**
- *
- */
 export class Watcher {
-    public cb: WatcherCallback
-    public vm: MVVM
-    public expOrFn: WatcherMethod
-    public depIds: Record<ID, Dep>
-    public getter: Getter
+    public readonly callback: WatcherCallback
+    public readonly vm: MVVM
+
+    private _depIds: Record<ID, Dep>
+    private _getter: Getter
+
     public value: DataType
 
-    constructor(vm: MVVM, expOrFn: WatcherMethod, cb: WatcherCallback) {
-        this.cb = cb
+    constructor(vm: MVVM, expOrFn: WatcherMethod, callback: WatcherCallback) {
+        this.callback = callback
         this.vm = vm
-        this.expOrFn = expOrFn
-        this.depIds = {}
+        this._depIds = {}
 
-        if (isFunction(expOrFn)) this.getter = expOrFn
-        else this.getter = parseGetter(expOrFn.trim())
+        if (isFunction(expOrFn)) this._getter = expOrFn
+        else this._getter = parseGetter(expOrFn.trim())
         this.value = this.get()
     }
 
@@ -38,24 +35,24 @@ export class Watcher {
         let oldVal = this.value
         if (newValue !== oldVal) {
             this.value = newValue
-            this.cb.call(this.vm, newValue, oldVal)
+            this.callback.call(this.vm, newValue, oldVal)
         }
     }
 
     public removeDep(dep: Dep): void {
-        delete this.depIds[dep.id]
+        delete this._depIds[dep.id]
     }
 
     public addDep(dep: Dep): void {
-        if (!hasOwn(this.depIds, dep.id)) {
+        if (!hasOwn(this._depIds, dep.id)) {
             dep.addSub(this)
-            this.depIds[dep.id] = dep
+            this._depIds[dep.id] = dep
         }
     }
 
     public get(): DataType {
         Dep.target = this
-        let value: DataType = this.getter.call(this.vm, this.vm)
+        let value: DataType = this._getter.call(this.vm, this.vm)
         Dep.target = null
         return value
     }

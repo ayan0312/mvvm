@@ -11,8 +11,8 @@ export function observe(
 }
 
 export class Observer {
-    public dep: Dep
-    public proxy: Record<string, any>
+    public readonly dep: Dep
+    public readonly proxy: Record<string, any>
 
     constructor(data: Data, vm: MVVM) {
         Object.keys(data).forEach((key) => {
@@ -43,7 +43,7 @@ export class Observer {
                     ob.dep.delete()
                     ob = null
                     result = Reflect.deleteProperty(target, key)
-                    target.__ob__.dep.notify()
+                    this.dep.notify()
                 }
                 return result
             },

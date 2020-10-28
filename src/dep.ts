@@ -18,12 +18,14 @@ export function getId(name?: string): ID {
 }
 
 export class Dep {
-    public id: ID
-    public subs: Watcher[]
+    public readonly id: ID
+
+    public subs: Watcher[] = []
+
+    public static target: Watcher | null = null
 
     constructor(name?: string) {
         this.id = getId(name)
-        this.subs = []
     }
 
     public delete(): void {
@@ -32,7 +34,7 @@ export class Dep {
         this.subs.forEach((sub) => {
             sub.removeDep(this)
         })
-        this.subs = []
+        this.subs.length = 0
     }
 
     public addSub(sub: Watcher): void {
@@ -49,6 +51,4 @@ export class Dep {
             sub.update()
         })
     }
-
-    public static target: Watcher | null = null
 }

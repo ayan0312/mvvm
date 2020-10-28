@@ -1,9 +1,10 @@
 import { Watcher, WatcherCallback } from './watcher'
 import { Compile } from './compile'
 import { observe } from './observer'
-import { extend, isFunction, NOOP } from './utilities'
-import { Component } from './component'
+import { extend, isFunction, isPlainObject, NOOP } from './utilities'
+import { MVVMComponent, MVVMComponentOptions } from './component'
 import { EventEmitter } from './events'
+import { EventLoop } from './nextTick'
 
 export type DataType = any
 export interface Computed {
@@ -34,11 +35,11 @@ export type MVVMLifecycleHooks = Record<
 >
 
 export interface MVVMOptions extends Partial<MVVMLifecycleHooks> {
-    element?: string
+    element?: string | HTMLElement
     computed?: Computed
-    data?: Data
+    data?: Data | (() => Data)
     methods?: Methods
-    components?: Record<string, Component>
+    components?: Record<string, MVVMComponentOptions>
     watch?: Record<keyof Data, WatcherCallback>
 }
 
@@ -49,43 +50,61 @@ export function getApplyFunction<T extends Function, R>(fn: T, scope: R): T {
     return func
 }
 
+export const createVM = (options: MVVMOptions = {}) =>
+    new MVVM(
+        extend(options, {
+            element: options.element ? options.element : document.body,
+        })
+    )
+
 export class MVVM {
+    public static cid = 0
+
+    public readonly $event = new EventEmitter<MVVM>(this)
+
+    public components: Record<string, Omit<MVVMComponentOptions, 'parent'>>
+    public cid: number
+
+    public $children: Record<string, MVVMComponent> = {}
+    public $refs: Record<string, Element> = {}
+
     public $options: MVVMOptions
     public $compile: Compile
     public $data: Data
-    public $event: EventEmitter<MVVM> = new EventEmitter(this)
     public $el: Element
 
     public $on = getApplyFunction(this.$event.on, this.$event)
     public $emit = getApplyFunction(this.$event.emit, this.$event)
     public $off = getApplyFunction(this.$event.off, this.$event)
     public $once = getApplyFunction(this.$event.once, this.$event)
+
     public $watch(key: string, cb: WatcherCallback) {
         new Watcher(this, key, cb)
     }
 
+    public $nextTick(callback?: () => void) {
+        if (callback) return EventLoop.nextTick<MVVM>(this, callback)
+        return EventLoop.nextTick<MVVM>(this)
+    }
+
     constructor(options: MVVMOptions = {}) {
         this.$options = options
-        this.$options.components = extend(
-            MVVM._components,
-            this.$options.components || {}
-        )
+        this.components = options.components
+        MVVM.cid += 1
+        this.cid = MVVM.cid
         this._init()
-        this.$compile = new Compile(
-            'element' in options ? options.element : document.body,
-            this
-        )
+        if (this.$options.element) this.compile(this.$options.element)
     }
 
-    public emitLifecycle(hookName: string) {
-        this.$options[hookName] && this.$options[hookName].call(this)
+    public use(fn: Function): MVVM {
+        fn.call(this, this)
+        return this
     }
 
-    public static component(name: string, component: Component): void {
-        MVVM._components[name] = component
+    protected compile(element: string | Element) {
+        this.$compile = new Compile(element, this)
+        this.$emit('mounted')
     }
-
-    public static _components: Record<string, Component>
 
     private _init() {
         this._initMethods()
@@ -121,7 +140,8 @@ export class MVVM {
     }
 
     private _initData(): void {
-        this.$data = this.$options.data
+        const data = this.$options.data
+        this.$data = isFunction(data) ? data() : data
         Object.keys(this.$data).forEach((key) =>
             Object.defineProperty(this, key, {
                 configurable: false,
@@ -139,7 +159,7 @@ export class MVVM {
 
     private _initComputed(): void {
         let computed = this.$options.computed
-        if (typeof computed !== 'object') return
+        if (!isPlainObject(computed)) return
         Object.keys(computed).forEach((key) => {
             let object = computed[key]
             Object.defineProperty(this, key, {
