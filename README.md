@@ -12,6 +12,19 @@ This is the repository for mvvm
 
 ## Example
 
+```html
+<div v-on:click="myClick"></div>
+<div v-style="myStyle"></div>
+<div v-show="display"></div>
+<div v-show:display></div>
+<div v-class="myClass"></div>
+<div v-model="myModel"></div>
+<div v-ref="myRef"></div>
+<div v-for="(item,index) in list"></div>
+<div v-text="myText"></div>
+<div v-html="myHTML"></div>
+```
+
 ```javascript
 import { createVM, MVVMComponent } from './mvvm.esm.js'
 const MyTitle = {
