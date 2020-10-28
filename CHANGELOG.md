@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## [1.1.0](https://github.com/vuejs/vue-next/compare/v1.0.0...v1.1.0) (2020-10-27)
+## [1.1.0](https://github.com/ayan0312/mvvm/compare/v1.0.0...v1.1.0) (2020-10-27)
 
 
 ### Bug Fixes
