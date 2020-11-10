@@ -22,7 +22,8 @@ This is the repository for mvvm
 ```
 
 ```javascript
-import { createVM, MVVMComponent } from './mvvm.esm.js'
+import { createVM, createComponent, initializeWebAssembly } from './mvvm.esm.js'
+
 const MyTitle = {
     data() {
         return {
@@ -63,7 +64,7 @@ const MyFooter = {
     }
 }
 
-const vm = createVM({
+const MyVM = {
     element: '#app',
     components: {
         'my-title': MyTitle,
@@ -150,16 +151,25 @@ const vm = createVM({
             this.increaseClickNumber()
         }
     }
-});
+}
 
-vm.$on('click', function () {
-    console.log('clickNumber:', this.number.click)
-})
+initializeWebAssembly('main.wasm')
+    .then(() => {
+        const vm = createVM(MyVM);
 
-vm.$once('over100Times', function () {
-    console.log('over 100!')
-})
+        vm.$on('click', function () {
+            
+            console.log('clickNumber:', this.number.click)
+        })
 
-const cVM = new MVVMComponent(MyTitle)
-cVM.$mount('#app2')
+        vm.$once('over100Times', function () {
+            console.log('over 100!')
+        })
+
+        const cVM = createComponent(MyTitle)
+        cVM.$mount('#app2')
+    })
+    .catch((err) => {
+        console.error(err)
+    })
 ```
