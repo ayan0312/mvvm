@@ -1,14 +1,10 @@
 # mvvm
 This is the repository for mvvm
 
-## Quickstart
+## Features
 
-- Start via [yarn](https://yarnpkg.com/):
-
-  ```bash
-  yarn dev
-  yarn build
-  ```
+ * `new Porxy()` to replace `Object.defineProperty`
+ * `EventEmitter` based on the go runtime for webassembly.In order to do so,we loss a lot of performance
 
 ## Example
 

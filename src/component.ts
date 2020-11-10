@@ -1,5 +1,9 @@
 import { MVVM, MVVMOptions } from './mvvm'
 
+export function createComponent(options: MVVMComponentOptions) {
+    return new MVVMComponent(options)
+}
+
 export interface MVVMComponentOptions extends Omit<MVVMOptions, 'element'> {
     template: string
     parent: MVVM | MVVMComponent

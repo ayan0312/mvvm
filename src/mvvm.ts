@@ -3,8 +3,8 @@ import { Compile } from './compile'
 import { observe } from './observer'
 import { extend, isFunction, isPlainObject, NOOP } from './utilities'
 import { MVVMComponent, MVVMComponentOptions } from './component'
-import { EventEmitter } from './events'
 import { EventLoop } from './nextTick'
+import { Go, GoEventEmitter } from './goAPI'
 
 export type DataType = any
 export interface Computed {
@@ -43,24 +43,43 @@ export interface MVVMOptions extends Partial<MVVMLifecycleHooks> {
     watch?: Record<keyof Data, WatcherCallback>
 }
 
-export function getApplyFunction<T extends Function, R>(fn: T, scope: R): T {
-    const func: any = function () {
-        fn.apply(scope, arguments)
-    }
-    return func
-}
-
-export const createVM = (options: MVVMOptions = {}) =>
-    new MVVM(
+export function createVM(options: MVVMOptions = {}) {
+    return new MVVM(
         extend(options, {
             element: options.element ? options.element : document.body,
         })
     )
+}
+
+export function initializeWebAssembly(path: string): Promise<void> {
+    if (!WebAssembly.instantiateStreaming) {
+        // polyfill
+        WebAssembly.instantiateStreaming = async (resp, importObject) => {
+            const source = await (await resp).arrayBuffer()
+            return await WebAssembly.instantiate(source, importObject)
+        }
+    }
+
+    const go = new Go()
+
+    return new Promise((resolve, reject) => {
+        WebAssembly.instantiateStreaming(fetch(path), go.importObject)
+            .then((res) => {
+                go.run(res.instance)
+            })
+            .then(() => {
+                resolve()
+            })
+            .catch(() => {
+                reject()
+            })
+    })
+}
 
 export class MVVM {
     public static cid = 0
 
-    public readonly $event = new EventEmitter<MVVM>(this)
+    public readonly $event: GoEventEmitter = new window['EventEmitter'](this)
 
     public components: Record<string, Omit<MVVMComponentOptions, 'parent'>>
     public cid: number
@@ -73,10 +92,17 @@ export class MVVM {
     public $data: Data
     public $el: Element
 
-    public $on = getApplyFunction(this.$event.on, this.$event)
-    public $emit = getApplyFunction(this.$event.emit, this.$event)
-    public $off = getApplyFunction(this.$event.off, this.$event)
-    public $once = getApplyFunction(this.$event.once, this.$event)
+    public $on(name: string, callback: (value: any) => void) {
+        this.$event.on(name, callback)
+    }
+
+    public $emit(name: string, value?: any) {
+        this.$event.emit(name, value)
+    }
+
+    public $once(name: string, callback: (value: any) => void) {
+        this.$event.once(name, callback)
+    }
 
     public $watch(key: string, cb: WatcherCallback) {
         new Watcher(this, key, cb)

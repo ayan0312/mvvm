@@ -14,7 +14,7 @@
     ],
     "scripts": {
         "dev": "rollup -c --watch",
-        "build": "rollup -c && gzip-size dist/mvvm.js",
+        "build": "rollup -c && gzip-size dist/mvvm.js && ./build.bat",
         "test": "jest --coverage",
         "lint": "prettier --write \"src/**/*.(ts|tsx)\""
     },

@@ -38,6 +38,31 @@ class Dep {
 }
 Dep.target = null;
 
+/*! *****************************************************************************
+Copyright (c) Microsoft Corporation.
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
+***************************************************************************** */
+
+function __awaiter(thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+}
+
 const extend = (a, b) => {
     for (const key in b) {
         a[key] = b[key];
@@ -95,51 +120,6 @@ class Observer {
     }
 }
 
-class EventEmitter {
-    constructor(scope) {
-        this._events = new Map();
-        if (scope)
-            this._scope = scope;
-    }
-    on(eventName, callback) {
-        if (!this._events.has(eventName))
-            this._events.set(eventName, []);
-        this._events.get(eventName).push(callback);
-    }
-    emit(eventName, value) {
-        if (!this._events.has(eventName))
-            return;
-        this._events.get(eventName).forEach((callback) => {
-            if (isFunction(callback)) {
-                if (this._scope)
-                    callback.call(this._scope, value);
-                else
-                    callback(value);
-            }
-        });
-    }
-    off(eventName, callback) {
-        if (callback) {
-            this._events.set(eventName, this._events.get(eventName).filter((cb) => {
-                if (cb === callback || cb.originFunction === callback)
-                    return false;
-            }));
-        }
-        else {
-            this._events.delete(eventName);
-        }
-    }
-    once(eventName, callback) {
-        const self = this;
-        const onceCallback = function () {
-            self.off(eventName, onceCallback);
-            callback.apply(self, arguments);
-        };
-        onceCallback.originFunction = callback;
-        this.on(eventName, onceCallback);
-    }
-}
-
 var EventLoop;
 (function (EventLoop) {
     const callbacks = [];
@@ -192,24 +172,39 @@ var EventLoop;
     EventLoop.nextTick = nextTick;
 })(EventLoop || (EventLoop = {}));
 
-function getApplyFunction(fn, scope) {
-    const func = function () {
-        fn.apply(scope, arguments);
-    };
-    return func;
+const Go = window['Go'];
+
+function createVM(options = {}) {
+    return new MVVM(extend(options, {
+        element: options.element ? options.element : document.body,
+    }));
 }
-const createVM = (options = {}) => new MVVM(extend(options, {
-    element: options.element ? options.element : document.body
-}));
+function initializeWebAssembly(path) {
+    if (!WebAssembly.instantiateStreaming) {
+        WebAssembly.instantiateStreaming = (resp, importObject) => __awaiter(this, void 0, void 0, function* () {
+            const source = yield (yield resp).arrayBuffer();
+            return yield WebAssembly.instantiate(source, importObject);
+        });
+    }
+    const go = new Go();
+    return new Promise((resolve, reject) => {
+        WebAssembly.instantiateStreaming(fetch(path), go.importObject)
+            .then(res => {
+            go.run(res.instance);
+        })
+            .then(() => {
+            resolve();
+        })
+            .catch(() => {
+            reject();
+        });
+    });
+}
 class MVVM {
     constructor(options = {}) {
-        this.$event = new EventEmitter(this);
+        this.$event = new (window['EventEmitter'])(this);
         this.$children = {};
         this.$refs = {};
-        this.$on = getApplyFunction(this.$event.on, this.$event);
-        this.$emit = getApplyFunction(this.$event.emit, this.$event);
-        this.$off = getApplyFunction(this.$event.off, this.$event);
-        this.$once = getApplyFunction(this.$event.once, this.$event);
         this.$options = options;
         this.components = options.components;
         MVVM.cid += 1;
@@ -217,6 +212,15 @@ class MVVM {
         this._init();
         if (this.$options.element)
             this.compile(this.$options.element);
+    }
+    $on(name, callback) {
+        this.$event.on(name, callback);
+    }
+    $emit(name, value) {
+        this.$event.emit(name, value);
+    }
+    $once(name, callback) {
+        this.$event.once(name, callback);
     }
     $watch(key, cb) {
         new Watcher(this, key, cb);
@@ -450,6 +454,9 @@ class ElementUtility {
     }
 }
 
+function createComponent(options) {
+    return new MVVMComponent(options);
+}
 class MVVMComponent extends MVVM {
     constructor(options) {
         super(options);
@@ -519,7 +526,7 @@ function vFor(node, vm, exp, c) {
                 let newNode = element.cloneNode(true);
                 newNode.__for__ = {
                     [item]: val[i],
-                    [index]: i
+                    [index]: i,
                 };
                 node.appendChild(newNode);
                 c.compileElement(node);
@@ -581,7 +588,7 @@ class Compile {
             slot.parentNode.removeChild(slot);
             return;
         }
-        this.slotCallback.push(c => {
+        this.slotCallback.push((c) => {
             c.compileElement(this.$slot);
             slot.parentNode.replaceChild(this.$slot, slot);
         });
@@ -683,12 +690,57 @@ class Compile {
     compileComponent(componentName, node) {
         const componentOptions = this.$vm.components[componentName];
         const component = new MVVMComponent(extend(componentOptions, {
-            parent: this.$vm
+            parent: this.$vm,
         }));
         component.$mount(node);
         this.$vm.$children[componentName] = component;
     }
 }
 
-export { Compile, Dep, ElementUtility, EventEmitter, EventLoop, MVVM, MVVMComponent, NOOP, Observer, Watcher, createVM, extend, getApplyFunction, getId, getSequence, getVMVal, hasOwn, isFunction, isPlainObject, objectToString, observe, parseGetter, setVMVal, toArray, toTypeString, unique };
+class EventEmitter {
+    constructor(scope) {
+        this._events = new Map();
+        if (scope)
+            this._scope = scope;
+    }
+    on(eventName, callback) {
+        if (!this._events.has(eventName))
+            this._events.set(eventName, []);
+        this._events.get(eventName).push(callback);
+    }
+    emit(eventName, value) {
+        if (!this._events.has(eventName))
+            return;
+        this._events.get(eventName).forEach((callback) => {
+            if (isFunction(callback)) {
+                if (this._scope)
+                    callback.call(this._scope, value);
+                else
+                    callback(value);
+            }
+        });
+    }
+    off(eventName, callback) {
+        if (callback) {
+            this._events.set(eventName, this._events.get(eventName).filter((cb) => {
+                if (cb === callback || cb.originFunction === callback)
+                    return false;
+            }));
+        }
+        else {
+            this._events.delete(eventName);
+        }
+    }
+    once(eventName, callback) {
+        const self = this;
+        const onceCallback = function () {
+            self.off(eventName, onceCallback);
+            callback.apply(self, arguments);
+        };
+        onceCallback.originFunction = callback;
+        this.on(eventName, onceCallback);
+    }
+}
+
+export { Compile, Dep, ElementUtility, EventEmitter, EventLoop, MVVM, MVVMComponent, NOOP, Observer, Watcher, createComponent, createVM, extend, getId, getSequence, getVMVal, hasOwn, initializeWebAssembly, isFunction, isPlainObject, objectToString, observe, parseGetter, setVMVal, toArray, toTypeString, unique };
 //# sourceMappingURL=mvvm.esm.js.map
