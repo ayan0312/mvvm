@@ -4,7 +4,7 @@ This is the repository for mvvm
 ## Features
 
  * `new Porxy()` to replace `Object.defineProperty`
- * `EventEmitter` based on the go runtime for webassembly.In order to do so,we loss a lot of performance
+ * `EventEmitter` based on the go runtime for webassembly.In order to do so,we lose a lot of performance
 
 ## Example
 
